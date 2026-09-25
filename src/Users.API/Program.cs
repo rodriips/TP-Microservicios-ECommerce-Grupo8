@@ -93,10 +93,10 @@ app.UseSerilogRequestLogging();
 // Manejador de excepciones del framework
 app.UseExceptionHandler();
 
-// Swagger UI disponible en raíz o /swagger
+// Swagger UI compatible con OpenAPI 3.0 / 2.0
 app.UseSwagger(c =>
 {
-    c.SerializeAsV2 = false;
+    c.SerializeAsV2 = true;
 });
 app.UseSwaggerUI(c =>
 {
