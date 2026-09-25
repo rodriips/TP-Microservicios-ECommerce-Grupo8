@@ -93,8 +93,11 @@ app.UseSerilogRequestLogging();
 // Manejador de excepciones del framework
 app.UseExceptionHandler();
 
-// Swagger UI
-app.UseSwagger();
+// Swagger UI disponible en raíz o /swagger
+app.UseSwagger(c =>
+{
+    c.SerializeAsV2 = false;
+});
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "Users.API v1");
