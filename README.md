@@ -1,7 +1,7 @@
 # 🛒 Sistema de E-Commerce - Microservicios .NET Core
 
-Trabajo Práctico para la materia **Arquitectura y Diseño de Software**.  
-Desarrollo de una plataforma de comercio electrónico modular basada en microservicios REST con **C# y .NET 8**, documentada con **Swagger / OpenAPI**, con logs estructurados en **Serilog**, trazabilidad mediante **Correlation ID** y manejo global de errores con **IExceptionHandler**.
+Trabajo Práctico para la materia **Arquitectura y Diseño de Software**.
+Desarrollo de una plataforma de comercio electrónico modular basada en microservicios REST con **C# y .NET Core 10**, documentada con **Swagger / OpenAPI**, con logs estructurados en **Serilog**, trazabilidad mediante **Correlation ID** y manejo global de errores con **IExceptionHandler**.
 
 ---
 
@@ -129,7 +129,7 @@ Prueba de credenciales erróneas (`USR-003`) y la activación automática del bl
 ## 🚀 Cómo Ejecutar el Proyecto Paso a Paso
 
 ### 1. Requisitos Previos
-- Tener instalado [.NET SDK 8.0](https://dotnet.microsoft.com/download/dotnet/8.0).
+- Tener instalado [.NET SDK 10.0](https://dotnet.microsoft.com/download/dotnet/10.0).
 
 ### 2. Clonar el Repositorio
 ```powershell
