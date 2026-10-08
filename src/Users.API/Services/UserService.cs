@@ -1,6 +1,5 @@
-using System.Collections.Concurrent;
-using BCrypt.Net;
 using Users.API.Common;
+using Users.API.Data;
 using Users.API.DTOs;
 using Users.API.Exceptions;
 using Users.API.Models;
@@ -8,35 +7,39 @@ using Users.API.Models;
 namespace Users.API.Services;
 
 /// <summary>
-/// Implementación en memoria del servicio de usuarios con persistencia thread-safe.
+/// Lógica de negocio de usuarios: registro, login, hashing seguro con BCrypt y bloqueo por intentos/fraude.
 /// </summary>
 public class UserService : IUserService
 {
-    private static readonly ConcurrentDictionary<Guid, User> _users = new();
-    private static readonly ConcurrentDictionary<string, Guid> _emailIndex = new(StringComparer.OrdinalIgnoreCase);
+    private readonly UserRepository _repository;
     private readonly ILogger<UserService> _logger;
 
-    public UserService(ILogger<UserService> logger)
+    public UserService(UserRepository repository, ILogger<UserService> logger)
     {
+        _repository = repository;
         _logger = logger;
     }
 
-    public Task<RegisterUserResponse> RegisterAsync(RegisterUserRequest request, CancellationToken cancellationToken = default)
+    public RegisterUserResponse Registrar(RegisterUserRequest request)
     {
-        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        string email = request.Email.Trim().ToLowerInvariant();
 
-        if (_emailIndex.ContainsKey(normalizedEmail))
+        // USR-001: Validación de email duplicado
+        User? existente = _repository.ObtenerPorEmail(email);
+        if (existente != null)
         {
-            _logger.LogWarning("Intento de registro con email duplicado: {Email}", request.Email);
-            throw new ConflictException(ErrorCodes.USR_001, $"El email '{request.Email}' ya está registrado.");
+            throw new ConflictException(
+                ErrorCodes.USR_001,
+                $"El email '{request.Email}' ya está registrado.",
+                "Ya existe un recurso con esos datos.");
         }
 
-        var user = new User
+        var usuario = new User
         {
             Id = Guid.NewGuid(),
             Nombre = request.Nombre.Trim(),
             Apellido = request.Apellido.Trim(),
-            Email = normalizedEmail,
+            Email = email,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
             FechaRegistro = DateTime.UtcNow,
             Activo = true,
@@ -44,118 +47,112 @@ public class UserService : IUserService
             BloqueadoPorFraude = false
         };
 
-        if (!_emailIndex.TryAdd(normalizedEmail, user.Id))
+        _repository.Agregar(usuario);
+        _logger.LogInformation("Usuario registrado con éxito: {UserId} ({Email})", usuario.Id, usuario.Email);
+
+        return new RegisterUserResponse
         {
-            throw new ConflictException(ErrorCodes.USR_001, $"El email '{request.Email}' ya está registrado.");
-        }
-
-        _users[user.Id] = user;
-
-        _logger.LogInformation("Usuario registrado con éxito: {UserId} ({Email})", user.Id, user.Email);
-
-        var response = new RegisterUserResponse
-        {
-            Id = user.Id,
-            Nombre = user.Nombre,
-            Apellido = user.Apellido,
-            Email = user.Email,
-            FechaRegistro = user.FechaRegistro,
-            Activo = user.Activo
+            Id = usuario.Id,
+            Nombre = usuario.Nombre,
+            Apellido = usuario.Apellido,
+            Email = usuario.Email,
+            FechaRegistro = usuario.FechaRegistro,
+            Activo = usuario.Activo
         };
-
-        return Task.FromResult(response);
     }
 
-    public Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
+    public LoginResponse IniciarSesion(LoginRequest request)
     {
-        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        string email = request.Email.Trim().ToLowerInvariant();
+        User? usuario = _repository.ObtenerPorEmail(email);
 
-        if (!_emailIndex.TryGetValue(normalizedEmail, out var userId) || !_users.TryGetValue(userId, out var user))
+        if (usuario == null)
         {
             _logger.LogWarning("Login fallido para email no existente: {Email}", request.Email);
             throw new UnauthorizedException(ErrorCodes.USR_003, "Credenciales incorrectas.");
         }
 
-        // Validación de bloqueo por fraude
-        if (user.BloqueadoPorFraude)
+        // USR-005: Bloqueo por fraude
+        if (usuario.BloqueadoPorFraude)
         {
-            _logger.LogWarning("Login rechazado para usuario bloqueado por fraude: {UserId}", user.Id);
+            _logger.LogWarning("Login rechazado para usuario bloqueado por fraude: {UserId}", usuario.Id);
             throw new ForbiddenException(ErrorCodes.USR_005, "Su cuenta fue suspendida por razones de seguridad. Contacte a soporte.");
         }
 
-        // Validación de bloqueo por intentos fallidos
-        if (!user.Activo || user.IntentosFallidos >= 3)
+        // USR-004: Bloqueo previo por intentos fallidos
+        if (!usuario.Activo || usuario.IntentosFallidos >= 3)
         {
-            _logger.LogWarning("Login rechazado para usuario bloqueado por intentos fallidos: {UserId}", user.Id);
+            _logger.LogWarning("Login rechazado para usuario bloqueado por intentos fallidos: {UserId}", usuario.Id);
             throw new ForbiddenException(ErrorCodes.USR_004, "Su cuenta fue bloqueada por superar el máximo de intentos fallidos. Contacte a soporte.");
         }
 
-        // Validación de contraseña con BCrypt
-        var isValidPassword = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
+        // Verificación de contraseña con BCrypt
+        bool esPasswordValido = BCrypt.Net.BCrypt.Verify(request.Password, usuario.PasswordHash);
 
-        if (!isValidPassword)
+        if (!esPasswordValido)
         {
-            user.IntentosFallidos++;
-            _logger.LogWarning("Contraseña incorrecta para {UserId}. Intentos fallidos: {Attempts}/3", user.Id, user.IntentosFallidos);
+            usuario.IntentosFallidos++;
+            _logger.LogWarning("Contraseña incorrecta para {UserId}. Intentos fallidos: {Attempts}/3", usuario.Id, usuario.IntentosFallidos);
 
-            if (user.IntentosFallidos >= 3)
+            if (usuario.IntentosFallidos >= 3)
             {
-                user.Activo = false;
-                _logger.LogWarning("Usuario {UserId} ha sido bloqueado tras alcanzar 3 intentos fallidos", user.Id);
+                usuario.Activo = false;
+                _logger.LogWarning("Usuario {UserId} ha sido bloqueado tras alcanzar 3 intentos fallidos", usuario.Id);
                 throw new ForbiddenException(ErrorCodes.USR_004, "Su cuenta fue bloqueada por superar el máximo de intentos fallidos. Contacte a soporte.");
             }
 
             throw new UnauthorizedException(ErrorCodes.USR_003, "Credenciales incorrectas.");
         }
 
-        // Login exitoso: reiniciar contador de intentos
-        user.IntentosFallidos = 0;
-        _logger.LogInformation("Login exitoso para usuario {UserId} ({Email})", user.Id, user.Email);
+        // Login exitoso: se resetea el contador de intentos fallidos
+        usuario.IntentosFallidos = 0;
+        _logger.LogInformation("Login exitoso para usuario {UserId} ({Email})", usuario.Id, usuario.Email);
 
-        var response = new LoginResponse
+        return new LoginResponse
         {
-            Id = user.Id,
-            Nombre = user.Nombre,
-            Apellido = user.Apellido,
-            Email = user.Email
+            Id = usuario.Id,
+            Nombre = usuario.Nombre,
+            Apellido = usuario.Apellido,
+            Email = usuario.Email
         };
-
-        return Task.FromResult(response);
     }
 
-    public Task<UserResponse> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public UserResponse ObtenerPorId(Guid id)
     {
-        if (!_users.TryGetValue(id, out var user))
+        User? usuario = _repository.ObtenerPorId(id);
+        if (usuario == null)
         {
             _logger.LogWarning("Usuario no encontrado con ID: {UserId}", id);
             throw new NotFoundException(ErrorCodes.USR_007, $"Usuario con ID '{id}' no encontrado.");
         }
 
-        var response = new UserResponse
+        return new UserResponse
         {
-            Id = user.Id,
-            Nombre = user.Nombre,
-            Apellido = user.Apellido,
-            Email = user.Email,
-            FechaRegistro = user.FechaRegistro,
-            Activo = user.Activo
+            Id = usuario.Id,
+            Nombre = usuario.Nombre,
+            Apellido = usuario.Apellido,
+            Email = usuario.Email,
+            FechaRegistro = usuario.FechaRegistro,
+            Activo = usuario.Activo
         };
-
-        return Task.FromResult(response);
     }
 
-    public Task<IEnumerable<UserResponse>> GetAllAsync(CancellationToken cancellationToken = default)
+    public List<UserResponse> ObtenerTodos()
     {
-        var users = _users.Values.Select(u => new UserResponse
+        var resultado = new List<UserResponse>();
+        foreach (var usuario in _repository.ObtenerTodos())
         {
-            Id = u.Id,
-            Nombre = u.Nombre,
-            Apellido = u.Apellido,
-            Email = u.Email,
-            FechaRegistro = u.FechaRegistro,
-            Activo = u.Activo
-        });
+            resultado.Add(new UserResponse
+            {
+                Id = usuario.Id,
+                Nombre = usuario.Nombre,
+                Apellido = usuario.Apellido,
+                Email = usuario.Email,
+                FechaRegistro = usuario.FechaRegistro,
+                Activo = usuario.Activo
+            });
+        }
 
-        return Task.FromResult(users);
+        return resultado;
     }
 }

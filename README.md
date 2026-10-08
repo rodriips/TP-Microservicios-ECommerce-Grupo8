@@ -92,12 +92,12 @@ Todas las respuestas de error siguen el estándar internacional **RFC 7231 Probl
 | Código | Código HTTP | Mensaje de Error | Motivo / Cuándo ocurre |
 | :---: | :---: | :--- | :--- |
 | **`USR-001`** | `409 Conflict` | *El email '{email}' ya está registrado.* | Se intenta registrar un email que ya existe en la base. |
-| **`USR-002`** | `400 Bad Request` | *Los datos del usuario son inválidos.* | Faltan campos obligatorios o el email no tiene formato correcto. |
+| **`USR-002`** | `400 Bad Request` | *Los datos del usuario son inválidos.* | Faltan campos obligatorios o el email/contraseña no tienen formato correcto. |
 | **`USR-003`** | `401 Unauthorized` | *Credenciales incorrectas.* | El correo o la contraseña no coinciden. |
-| **`USR-004`** | `403 Forbidden` | *Su cuenta fue bloqueada por superar el máximo de intentos fallidos.* | Se alcanzaron 3 o más intentos fallidos seguidos. |
-| **`USR-005`** | `403 Forbidden` | *Su cuenta fue suspendida por razones de seguridad.* | Usuario bloqueado por sospecha de fraude. |
+| **`USR-004`** | `403 Forbidden` | *Su cuenta fue bloqueada por superar el máximo de intentos fallidos.* | Se alcanzaron 3 intentos fallidos seguidos (o probar con usuario precargado `bloqueado@email.com`). |
+| **`USR-005`** | `403 Forbidden` | *Su cuenta fue suspendida por razones de seguridad.* | Usuario bloqueado por sospecha de fraude (probar con usuario precargado `fraude@email.com`). |
 | **`USR-006`** | `500 Internal Server Error` | *Error interno al procesar el usuario.* | Error no controlado en el servidor o caída del sistema. |
-| **`USR-007`** | `404 Not Found` | *Usuario con ID '{id}' no encontrado.* | Se busca un ID inexistente. |
+| **`USR-007`** | `404 Not Found` | *Usuario con ID '{id}' no encontrado.* | Se busca un usuario con un GUID inexistente (requerido por `Orders.API`). |
 
 ---
 
