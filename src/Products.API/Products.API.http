@@ -1,6 +1,69 @@
-@Products.API_HostAddress = http://localhost:5107
+@host = http://localhost:5001
 
-GET {{Products.API_HostAddress}}/weatherforecast/
-Accept: application/json
+### Listar todos
+GET {{host}}/api/products
+
+### Filtrar por categoría y nombre
+GET {{host}}/api/products?categoria=Electrónica&nombre=dell
+
+### Obtener por Id (éxito: producto de ejemplo)
+GET {{host}}/api/products/3fa85f64-5717-4562-b3fc-2c963f66afa6
+
+### Obtener por Id (error PRD-001)
+GET {{host}}/api/products/99
+
+### Crear (éxito)
+POST {{host}}/api/products
+Content-Type: application/json
+
+{
+  "nombre": "Auriculares Sony WH-1000XM5",
+  "descripcion": "Auriculares inalámbricos con cancelación de ruido",
+  "precio": 350.00,
+  "stock": 15,
+  "categoria": "Electrónica"
+}
+
+### Crear (error PRD-003: nombre duplicado en la categoría)
+POST {{host}}/api/products
+Content-Type: application/json
+
+{
+  "nombre": "Notebook Dell XPS 15",
+  "descripcion": "Otra igual",
+  "precio": 1500.00,
+  "stock": 1,
+  "categoria": "Electrónica"
+}
+
+### Crear (error PRD-002: datos inválidos)
+POST {{host}}/api/products
+Content-Type: application/json
+
+{
+  "nombre": "",
+  "precio": -5,
+  "stock": -1,
+  "categoria": "Electrónica"
+}
+
+### Actualizar (éxito)
+PUT {{host}}/api/products/3fa85f64-5717-4562-b3fc-2c963f66afa6
+Content-Type: application/json
+
+{
+  "nombre": "Notebook Dell XPS 15",
+  "descripcion": "Laptop 15 pulgadas, 64GB RAM",
+  "precio": 1750.00,
+  "stock": 8,
+  "categoria": "Electrónica"
+}
+
+### Eliminar (éxito si no hay órdenes activas)
+DELETE {{host}}/api/products/3fa85f64-5717-4562-b3fc-2c963f66afa6
+
+### Health checks
+GET {{host}}/health
 
 ###
+GET {{host}}/health/live
