@@ -40,7 +40,7 @@ graph TD
 | :--- | :---: | :--- | :---: |
 | **`Products.API`** | `5001` | [http://localhost:5001/swagger](http://localhost:5001/swagger) | ✅ Completado |
 | **`Users.API`** | `5002` | [http://localhost:5002/swagger](http://localhost:5002/swagger) | ✅ Completado |
-| **`Cart.API`** | `5003` | `http://localhost:5003/swagger` | ⏳ Pendiente |
+| **`Cart.API`** | `5003` | [http://localhost:5003/swagger](http://localhost:5003/swagger) | ✅ Completado |
 | **`Orders.API`** | `5004` | `http://localhost:5004/swagger` | ⏳ Pendiente |
 | **`Notifications.API`** | `5005` | [http://localhost:5005/swagger](http://localhost:5005/swagger) | ✅ Completado |
 
@@ -106,6 +106,67 @@ graph TD
 | **`USR-007`** | `404 Not Found` | *Usuario con ID '{id}' no encontrado.* | Se busca un usuario con un GUID inexistente. |
 
 > ℹ️ `USR-007` no está en el catálogo de la consigna (que llega hasta `USR-006`). Se agregó para el endpoint `GET /api/users/{id}`, que necesitan los otros servicios.
+
+---
+
+## 🛒 Microservicio `Cart.API` (Carrito de Compras)
+
+> 💡 **¿Qué es este servicio?**
+> `Cart.API` es el **changuito** de la tienda online.
+> 1. Cada cliente tiene su propio carrito identificado por su ID de usuario.
+> 2. Antes de agregar o actualizar un producto en el carrito, le pregunta a `Products.API` si ese producto existe y si tiene suficiente stock disponible.
+> 3. Si el producto no existe (`CRT-002`) o el stock no alcanza (`CRT-003`), lo rechaza con un mensaje de error claro.
+> 4. El cliente puede vaciar el carrito completo de un solo golpe o sacar un producto individual.
+
+### 📋 Funcionalidades y Endpoints de `Cart.API`
+
+#### 1. Ver el carrito (`GET /api/cart/{userId}`)
+- **Qué hace:** Devuelve la lista de productos y cantidades que el usuario tiene en su carrito.
+- **Códigos de respuesta:**
+  - `200 OK`: Lista de ítems del carrito.
+  - `404 Not Found`: El usuario no tiene carrito activo (`CRT-001`).
+
+#### 2. Agregar producto al carrito (`POST /api/cart/{userId}/items`)
+- **Qué hace:** Agrega un producto al carrito. Si el carrito no existe, lo crea. Si el producto ya estaba en el carrito, suma las cantidades.
+- **Validaciones HTTP contra `Products.API`:**
+  - Verifica que el producto exista (`CRT-002`).
+  - Verifica que haya stock suficiente (`CRT-003`).
+- **Códigos de respuesta:**
+  - `204 No Content`: Ítem agregado correctamente.
+  - `400 Bad Request`: Cantidad inválida (`CRT-004`).
+  - `404 Not Found`: El producto no existe en el catálogo (`CRT-002`).
+  - `422 Unprocessable Entity`: Stock insuficiente (`CRT-003`).
+
+#### 3. Actualizar cantidad (`PUT /api/cart/{userId}/items/{productId}`)
+- **Qué hace:** Cambia la cantidad de un producto ya existente en el carrito, re-validando stock en `Products.API`.
+- **Códigos de respuesta:**
+  - `204 No Content`: Actualizado correctamente.
+  - `404 Not Found`: El carrito o el ítem no existen (`CRT-001` / `CRT-002`).
+  - `422 Unprocessable Entity`: Stock insuficiente (`CRT-003`).
+
+#### 4. Eliminar un producto del carrito (`DELETE /api/cart/{userId}/items/{productId}`)
+- **Qué hace:** Quita un producto específico del carrito.
+- **Códigos de respuesta:**
+  - `204 No Content`: Eliminado correctamente.
+  - `404 Not Found`: El carrito o el ítem no existen (`CRT-001` / `CRT-002`).
+
+#### 5. Vaciar el carrito (`DELETE /api/cart/{userId}`)
+- **Qué hace:** Elimina el carrito completo del usuario.
+- **Códigos de respuesta:**
+  - `204 No Content`: Carrito vaciado.
+  - `404 Not Found`: El usuario no tiene carrito activo (`CRT-001`).
+
+### 🚨 Catálogo de Errores de `Cart.API`
+
+| Código | Código HTTP | Mensaje de Error | Motivo / Cuándo ocurre |
+| :---: | :---: | :--- | :--- |
+| **`CRT-001`** | `404 Not Found` | *El usuario '{id}' no tiene un carrito activo.* | Se consulta o modifica el carrito de un usuario que no tiene uno. |
+| **`CRT-002`** | `404 Not Found` | *El producto '{id}' no existe en el catálogo.* | `Products.API` devuelve 404 para ese `productoId`. |
+| **`CRT-003`** | `422 Unprocessable Entity` | *Stock insuficiente para el producto '{id}'.* | La cantidad solicitada supera el stock disponible en `Products.API`. |
+| **`CRT-004`** | `400 Bad Request` | *La cantidad debe ser mayor a 0.* | Se envía una cantidad menor o igual a 0. |
+| **`CRT-005`** | `500 Internal Server Error` | *Error interno al procesar el carrito.* | Error no controlado en el servidor. |
+
+> ⚠️ **Para probar `Cart.API`** necesitás que `Products.API` esté corriendo en `http://localhost:5001`. Si no está levantado, los POST y PUT devolverán error de conexión.
 
 ---
 
@@ -177,7 +238,16 @@ dotnet run --project src/Users.API/Users.API.csproj
 👉 Swagger UI: [http://localhost:5002/swagger](http://localhost:5002/swagger)  
 👉 Health Checks: [http://localhost:5002/health](http://localhost:5002/health)
 
-### 5. Ejecutar `Notifications.API` (Puerto 5005)
+### 5. Ejecutar `Cart.API` (Puerto 5003)
+> ⚠️ Necesita que `Products.API` esté levantado para validar stock y existencia de productos.
+
+```powershell
+dotnet run --project src/Cart.API/Cart.API.csproj
+```
+👉 Swagger UI: [http://localhost:5003/swagger](http://localhost:5003/swagger)
+👉 Health Checks: [http://localhost:5003/health](http://localhost:5003/health)
+
+### 6. Ejecutar `Notifications.API` (Puerto 5005)
 > ⚠️ Necesita que `Users.API` esté levantado al mismo tiempo para poder validar el destinatario.
 
 ```powershell
