@@ -6,9 +6,9 @@ Desarrollo de una plataforma de comercio electrónico modular basada en microser
 ---
 
 ## 👥 Integrantes del Grupo 8
-- **Franco Martin Eusebio** (`Users.API`)
-- **Rodrigo Perez Suzuki** (`Products.API`)
-- **Rocío Brunaga**
+- **Franco Martin Eusebio** (`Users.API`, `Cart.API`)
+- **Rodrigo Perez Suzuki** (`Products.API`, `Notifications.API`)
+- **Rocío Brunaga** (`Orders.API`)
 
 ---
 
@@ -20,14 +20,16 @@ El sistema está dividido en **5 microservicios independientes**, cada uno con s
 graph TD
     Client[Cliente / Frontend / Swagger UI] -->|HTTP| UsersAPI[Users.API :5002]
     Client -->|HTTP| ProductsAPI[Products.API :5001]
-    Client -->|HTTP| CartAPI[Cart.API :5004]
-    Client -->|HTTP| OrdersAPI[Orders.API :5003]
+    Client -->|HTTP| CartAPI[Cart.API :5003]
+    Client -->|HTTP| OrdersAPI[Orders.API :5004]
     Client -->|HTTP| NotificationsAPI[Notifications.API :5005]
 
     CartAPI -->|Valida Stock y Producto| ProductsAPI
     OrdersAPI -->|Valida Usuario Activo| UsersAPI
-    OrdersAPI -->|Valida y Descuenta Stock| ProductsAPI
+    OrdersAPI -->|Valida Productos y Stock| ProductsAPI
     OrdersAPI -->|Dispara Notificación| NotificationsAPI
+    ProductsAPI -->|Consulta órdenes activas antes de borrar| OrdersAPI
+    NotificationsAPI -->|Valida que el destinatario exista| UsersAPI
 ```
 
 ---
@@ -38,9 +40,11 @@ graph TD
 | :--- | :---: | :--- | :---: |
 | **`Products.API`** | `5001` | [http://localhost:5001/swagger](http://localhost:5001/swagger) | ✅ Completado |
 | **`Users.API`** | `5002` | [http://localhost:5002/swagger](http://localhost:5002/swagger) | ✅ Completado |
-| **`Orders.API`** | `5003` | `http://localhost:5003/swagger` | ⏳ Pendiente |
-| **`Cart.API`** | `5004` | `http://localhost:5004/swagger` | ⏳ Pendiente |
-| **`Notifications.API`** | `5005` | `http://localhost:5005/swagger` | ⏳ Pendiente |
+| **`Cart.API`** | `5003` | `http://localhost:5003/swagger` | ⏳ Pendiente |
+| **`Orders.API`** | `5004` | `http://localhost:5004/swagger` | ⏳ Pendiente |
+| **`Notifications.API`** | `5005` | [http://localhost:5005/swagger](http://localhost:5005/swagger) | ✅ Completado |
+
+> ⚠️ Los puertos están fijados en el código: `Products.API` llama a `Orders.API` en el **5004** (para PRD-004) y `Notifications.API` llama a `Users.API` en el **5002**. Si se cambia un puerto, hay que actualizar también la sección `Servicios` del `appsettings.json` del servicio que lo llama.
 
 ---
 
@@ -86,7 +90,7 @@ graph TD
 
 - **`POST /api/users/register`**: Registra un nuevo usuario con contraseña hasheada y validación de email único (`409 Conflict - USR-001`).
 - **`POST /api/users/login`**: Autenticación con verificación de credenciales (`401 Unauthorized - USR-003`), bloqueo tras 3 intentos (`403 Forbidden - USR-004`) o fraude (`403 Forbidden - USR-005`).
-- **`GET /api/users/{id}`**: Obtiene el usuario por GUID (utilizado por `Orders.API` para validar si el comprador existe y está activo).
+- **`GET /api/users/{id}`**: Obtiene el usuario por GUID (`404 Not Found - USR-007`). Lo usan `Orders.API` para validar el comprador y `Notifications.API` para validar el destinatario.
 - **`GET /api/users`**: Lista todos los usuarios registrados.
 
 ### 🚨 Catálogo de Errores de `Users.API`
@@ -100,6 +104,35 @@ graph TD
 | **`USR-005`** | `403 Forbidden` | *Su cuenta fue suspendida por razones de seguridad.* | Usuario bloqueado por fraude (usuario precargado `fraude@email.com`). |
 | **`USR-006`** | `500 Internal Server Error` | *Error interno al procesar el usuario.* | Error no controlado en el servidor. |
 | **`USR-007`** | `404 Not Found` | *Usuario con ID '{id}' no encontrado.* | Se busca un usuario con un GUID inexistente. |
+
+> ℹ️ `USR-007` no está en el catálogo de la consigna (que llega hasta `USR-006`). Se agregó para el endpoint `GET /api/users/{id}`, que necesitan los otros servicios.
+
+---
+
+## 🔔 Microservicio `Notifications.API` (Notificaciones)
+
+> 💡 **¿Qué es este servicio?**  
+> `Notifications.API` es el **correo interno** de la tienda online.  
+> 1. Cuando otro servicio (o una persona desde Swagger) quiere avisarle algo a un cliente, le pide a este servicio que le mande un mensaje.
+> 2. Antes de mandarlo, le pregunta a `Users.API` si ese cliente existe. Si no existe, no lo manda.
+> 3. El mensaje puede ir por **Email**, **Push** o **SMS**. El envío es **simulado**: no se conecta con ningún proveedor real, solo lo registra como "Enviada".
+> 4. Guarda todas las notificaciones, así se puede consultar el historial de cada cliente.
+
+### 📋 Funcionalidades y Endpoints de `Notifications.API`
+
+- **`POST /api/notifications/send`**: Registra una notificación y simula su envío. Valida el destinatario contra `Users.API` (`404 Not Found - NTF-001`) y que el tipo sea `Email`, `Push` o `SMS` (`400 Bad Request - NTF-002`). Responde `201 Created` con estado `Enviada`.
+- **`GET /api/notifications/{userId}`**: Lista las notificaciones de un usuario (`404 Not Found - NTF-003` si no tiene ninguna).
+
+Viene precargada una notificación para **María** (`a1b2c3d4-0000-0000-0000-111122223333`, el usuario de ejemplo de `Users.API`), así el `GET` responde algo desde el primer momento.
+
+### 🚨 Catálogo de Errores de `Notifications.API`
+
+| Código | Código HTTP | Mensaje de Error | Motivo / Cuándo ocurre |
+| :---: | :---: | :--- | :--- |
+| **`NTF-001`** | `404 Not Found` | *El usuario destinatario no fue encontrado.* | `Users.API` responde 404 para ese `usuarioId`. |
+| **`NTF-002`** | `400 Bad Request` | *Los datos de la notificación son inválidos.* | Falta `usuarioId` o `mensaje`, el mensaje supera 500 caracteres o el tipo no es `Email`, `Push` ni `SMS`. |
+| **`NTF-003`** | `404 Not Found` | *No se encontraron notificaciones para el usuario.* | El usuario no tiene notificaciones registradas. |
+| **`NTF-004`** | `500 Internal Server Error` | *Error interno al procesar la notificación.* | Error no controlado, o `Users.API` no está levantado y no se puede validar el destinatario. |
 
 ---
 
@@ -144,18 +177,30 @@ dotnet run --project src/Users.API/Users.API.csproj
 👉 Swagger UI: [http://localhost:5002/swagger](http://localhost:5002/swagger)  
 👉 Health Checks: [http://localhost:5002/health](http://localhost:5002/health)
 
+### 5. Ejecutar `Notifications.API` (Puerto 5005)
+> ⚠️ Necesita que `Users.API` esté levantado al mismo tiempo para poder validar el destinatario.
+
+```powershell
+dotnet run --project src/Notifications.API/Notifications.API.csproj
+```
+👉 Swagger UI: [http://localhost:5005/swagger](http://localhost:5005/swagger)  
+👉 Health Checks: [http://localhost:5005/health](http://localhost:5005/health)
+
+### 💡 Levantar varios servicios a la vez desde Visual Studio
+Clic derecho en la solución → **Configure Startup Projects** → **Multiple startup projects** → poner en **Start** los servicios que se quieran levantar (por ejemplo `Users.API` y `Notifications.API`).
+
 ---
 
 ## 📂 Estructura Arquitectónica Homogénea
 
-Ambos microservicios comparten la misma arquitectura limpia y modular requerida por la cátedra:
+Todos los microservicios comparten la misma arquitectura limpia y modular requerida por la cátedra:
 
 ```
 src/{Servicio}.API/
 ├── Controllers/            # Controladores REST documentados con XML Comments
-├── Models/                 # Entidades del dominio (Product, User)
+├── Models/                 # Entidades del dominio (Product, User, Notification)
 ├── DTOs/                   # Request, Response y ErrorResponse estructurado
-├── Services/               # Lógica de negocio (IProductService, IUserService)
+├── Services/               # Lógica de negocio (IProductService, IUserService, INotificationService)
 ├── Data/                   # Repositorios en memoria con datos precargados
 ├── Exceptions/             # Excepciones tipadas de negocio (NotFound, Conflict, etc.)
 ├── ExceptionHandlers/      # Handlers individuales implementando IExceptionHandler
