@@ -1,6 +1,45 @@
-@Notifications.API_HostAddress = http://localhost:5147
+@host = http://localhost:5005
 
-GET {{Notifications.API_HostAddress}}/weatherforecast/
-Accept: application/json
+# Para probar el envío, Users.API tiene que estar levantado en el puerto 5002.
+
+### Enviar (éxito: María es el usuario de ejemplo de Users.API)
+POST {{host}}/api/notifications/send
+Content-Type: application/json
+
+{
+  "usuarioId": "a1b2c3d4-0000-0000-0000-111122223333",
+  "mensaje": "Su orden #f1e2d3c4 fue confirmada.",
+  "tipo": "Email"
+}
+
+### Enviar (error NTF-001: el usuario no existe en Users.API)
+POST {{host}}/api/notifications/send
+Content-Type: application/json
+
+{
+  "usuarioId": "99999999-0000-0000-0000-000000000000",
+  "mensaje": "Hola",
+  "tipo": "Push"
+}
+
+### Enviar (error NTF-002: tipo no reconocido y mensaje vacío)
+POST {{host}}/api/notifications/send
+Content-Type: application/json
+
+{
+  "usuarioId": "a1b2c3d4-0000-0000-0000-111122223333",
+  "mensaje": "",
+  "tipo": "Fax"
+}
+
+### Listar notificaciones de María (éxito)
+GET {{host}}/api/notifications/a1b2c3d4-0000-0000-0000-111122223333
+
+### Listar notificaciones de un usuario sin notificaciones (error NTF-003)
+GET {{host}}/api/notifications/99999999-0000-0000-0000-000000000000
+
+### Health checks
+GET {{host}}/health
 
 ###
+GET {{host}}/health/live
