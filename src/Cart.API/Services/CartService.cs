@@ -18,12 +18,15 @@ public class CartService : ICartService
     private readonly CartRepository _cartRepository;
     private readonly HttpClient _productsClient;
     private readonly ILogger<CartService> _logger;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public CartService(CartRepository cartRepository, IHttpClientFactory httpClientFactory, ILogger<CartService> logger)
+    public CartService(CartRepository cartRepository, IHttpClientFactory httpClientFactory, ILogger<CartService> logger,
+        IHttpContextAccessor httpContextAccessor)
     {
         _cartRepository = cartRepository;
         _productsClient = httpClientFactory.CreateClient("ProductsAPI");
         _logger = logger;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     // ---------------------------------------------------------------
@@ -232,7 +235,17 @@ public class CartService : ICartService
     /// </summary>
     private async Task<ProductoDto> ObtenerProductoOExceptionAsync(Guid productoId)
     {
-        var response = await _productsClient.GetAsync($"api/products/{productoId}");
+        // Armamos el request manualmente para poder propagar el X-Correlation-Id
+        // al log de Products.API y mantener la trazabilidad distribuida (sección 5.5).
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"api/products/{productoId}");
+
+        var correlationId = _httpContextAccessor.HttpContext?.Items["CorrelationId"]?.ToString();
+        if (!string.IsNullOrWhiteSpace(correlationId))
+        {
+            request.Headers.Add("X-Correlation-Id", correlationId);
+        }
+
+        var response = await _productsClient.SendAsync(request);
 
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
