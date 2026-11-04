@@ -25,7 +25,7 @@ graph TD
     Client -->|HTTP| NotificationsAPI[Notifications.API :5005]
 
     CartAPI -->|Valida Stock y Producto| ProductsAPI
-    OrdersAPI -->|Valida Usuario Activo| UsersAPI
+    OrdersAPI -->|Valida Usuario Existente| UsersAPI
     OrdersAPI -->|Valida Productos y Stock| ProductsAPI
     OrdersAPI -->|Dispara Notificación| NotificationsAPI
     ProductsAPI -->|Consulta órdenes activas antes de borrar| OrdersAPI
