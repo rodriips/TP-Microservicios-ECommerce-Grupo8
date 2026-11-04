@@ -41,7 +41,7 @@ graph TD
 | **`Products.API`** | `5001` | [http://localhost:5001/swagger](http://localhost:5001/swagger) | ✅ Completado |
 | **`Users.API`** | `5002` | [http://localhost:5002/swagger](http://localhost:5002/swagger) | ✅ Completado |
 | **`Cart.API`** | `5003` | [http://localhost:5003/swagger](http://localhost:5003/swagger) | ✅ Completado |
-| **`Orders.API`** | `5004` | `http://localhost:5004/swagger` | ⏳ Pendiente |
+| **`Orders.API`** | `5004` | [http://localhost:5004/swagger](http://localhost:5004/swagger) | ✅ Completado |
 | **`Notifications.API`** | `5005` | [http://localhost:5005/swagger](http://localhost:5005/swagger) | ✅ Completado |
 
 > ⚠️ Los puertos están fijados en el código: `Products.API` llama a `Orders.API` en el **5004** (para PRD-004) y `Notifications.API` llama a `Users.API` en el **5002**. Si se cambia un puerto, hay que actualizar también la sección `Servicios` del `appsettings.json` del servicio que lo llama.
@@ -197,20 +197,215 @@ Viene precargada una notificación para **María** (`a1b2c3d4-0000-0000-0000-111
 
 ---
 
+## 🧾 Microservicio `Orders.API` (Órdenes de Compra)
+
+> 💡 **¿Qué es este servicio?**
+> `Orders.API` es la **caja y el mostrador de pagos** de la tienda online.
+> 1. Cuando un cliente decide comprar, crea una orden con su ID de usuario y la lista de productos con sus cantidades.
+> 2. Antes de confirmarla, le pregunta a `Users.API` si ese usuario existe y está activo, y a `Products.API` si cada producto existe y tiene stock suficiente.
+> 3. Una orden nace en estado **Pendiente** y avanza por un ciclo de vida estricto: `Pendiente → Confirmada → Enviada → Entregada`. También puede cancelarse desde `Pendiente` o `Confirmada`.
+> 4. Si alguien intenta hacer una transición prohibida (por ejemplo, pasar directamente de `Pendiente` a `Entregada`), el servicio lo rechaza con un error claro.
+
+### 📋 Funcionalidades y Endpoints de `Orders.API`
+
+#### 1. Listar órdenes (`GET /api/orders`)
+- **Qué hace:** Devuelve todas las órdenes. Acepta un filtro opcional por usuario (`?usuarioId=<guid>`).
+- **Códigos de respuesta:**
+  - `200 OK`: Lista de órdenes (puede estar vacía).
+
+#### 2. Ver detalle de una orden (`GET /api/orders/{id}`)
+- **Qué hace:** Devuelve los datos completos de una orden específica.
+- **Códigos de respuesta:**
+  - `200 OK`: Detalle de la orden.
+  - `404 Not Found`: La orden no existe (`ORD-001`).
+
+#### 3. Crear una orden (`POST /api/orders`)
+- **Qué hace:** Crea una nueva orden en estado `Pendiente`. Realiza tres validaciones HTTP antes de crear:
+  1. Verifica que el usuario exista en `Users.API` (`ORD-003`).
+  2. Verifica que cada producto exista en `Products.API` (`ORD-004`).
+  3. Verifica que haya stock suficiente para cada producto (`ORD-005`).
+- **Códigos de respuesta:**
+  - `201 Created`: Orden creada con éxito.
+  - `400 Bad Request`: Datos inválidos (`ORD-002`).
+  - `404 Not Found`: Usuario o producto no encontrado (`ORD-003` / `ORD-004`).
+  - `422 Unprocessable Entity`: Stock insuficiente (`ORD-005`).
+
+#### 4. Cambiar estado de una orden (`PUT /api/orders/{id}/status`)
+- **Qué hace:** Avanza o cancela el estado de una orden siguiendo las transiciones válidas:
+  - `Pendiente` → `Confirmada` o `Cancelada`
+  - `Confirmada` → `Enviada` o `Cancelada`
+  - `Enviada` → `Entregada`
+  - `Entregada` / `Cancelada` → **ningún cambio posible** (orden cerrada)
+- **Códigos de respuesta:**
+  - `200 OK`: Estado actualizado.
+  - `400 Bad Request`: Estado enviado no reconocido (`ORD-002`).
+  - `404 Not Found`: La orden no existe (`ORD-001`).
+  - `409 Conflict`: La transición solicitada no está permitida (`ORD-006`).
+
+### 🚨 Catálogo de Errores de `Orders.API`
+
+| Código | Código HTTP | Mensaje de Error | Motivo / Cuándo ocurre |
+| :---: | :---: | :--- | :--- |
+| **`ORD-001`** | `404 Not Found` | *Orden no encontrada.* | El ID consultado no existe. |
+| **`ORD-002`** | `400 Bad Request` | *Los datos de la orden son inválidos.* | Faltan campos obligatorios o el estado enviado no es reconocido. |
+| **`ORD-003`** | `404 Not Found` | *El usuario no fue encontrado.* | `Users.API` devuelve 404 para ese `usuarioId`. |
+| **`ORD-004`** | `404 Not Found` | *El producto no fue encontrado.* | `Products.API` devuelve 404 para uno de los productos del pedido. |
+| **`ORD-005`** | `422 Unprocessable Entity` | *Stock insuficiente para el producto '{id}'.* | La cantidad solicitada supera el stock disponible en `Products.API`. |
+| **`ORD-006`** | `409 Conflict` | *El estado de la orden no puede ser modificado.* | La transición de estado solicitada no está permitida (p. ej. `Enviada → Pendiente`). |
+| **`ORD-007`** | `500 Internal Server Error` | *Error interno al procesar la orden.* | Error no controlado en el servidor. |
+
+> ⚠️ **Para probar `Orders.API`** necesitás que `Users.API` (:5002) y `Products.API` (:5001) estén corriendo. Sin ellos, los `POST` fallarán con error de conexión al intentar validar usuario y stock.
+
+---
+
 ## 📸 Evidencias de Funcionamiento (Swagger UI)
 
-### 1. Registro Exitoso de un Usuario (`201 Created`)
-![Registro Exitoso de Usuario](docs/Screenshots/users-register-201-success.png)
+> Todas las capturas muestran la sección **"Server response"** real de Swagger UI con el JSON de error incluyendo `errorCode` y `errorMessage`.
 
 ---
 
-### 2. Error por Email Duplicado (`409 Conflict - USR-001`)
-![Error Email Duplicado](docs/Screenshots/users-register-409-duplicate-email.png)
+### 👤 `Users.API`
+
+#### 1. Registro Exitoso (`201 Created`)
+![Registro exitoso de usuario](docs/Screenshots/users/users-register-201-success.png)
 
 ---
 
-### 3. Errores de Autenticación y Bloqueo de Cuenta (`401 USR-003` / `403 USR-004`)
-![Errores de Login y Bloqueo](docs/Screenshots/users-login-401-403-lockout-error.png)
+#### 2. Email duplicado (`409 Conflict — USR-001`)
+![Email duplicado](docs/Screenshots/users/users-register-409-usr-001-duplicate-email.png)
+
+---
+
+#### 3. Credenciales incorrectas (`401 Unauthorized — USR-003`)
+![Credenciales incorrectas](docs/Screenshots/users/users-login-401-usr-003-wrong-credentials.png)
+
+---
+
+#### 4. Cuenta bloqueada (`403 Forbidden — USR-004`)
+![Cuenta bloqueada](docs/Screenshots/users/users-login-403-usr-004-account-locked.png)
+
+---
+
+### 📦 `Products.API`
+
+#### 5. Producto no encontrado (`404 Not Found — PRD-001`)
+![Producto no encontrado](docs/Screenshots/products/products-get-404-prd-001-not-found.png)
+
+---
+
+#### 6. Producto creado con éxito (`201 Created`)
+![Producto creado exitosamente](docs/Screenshots/products/products-create-201-success.png)
+
+---
+
+#### 7. Datos de producto inválidos (`400 Bad Request — PRD-002`)
+![Datos de producto inválidos](docs/Screenshots/products/products-create-400-prd-002-invalid-data.png)
+
+---
+
+#### 8. Nombre duplicado en misma categoría (`409 Conflict — PRD-003`)
+![Nombre de producto duplicado](docs/Screenshots/products/products-create-409-prd-003-duplicate-name.png)
+
+---
+
+#### 9. Producto con órdenes activas (`409 Conflict — PRD-004`)
+![Producto con órdenes activas](docs/Screenshots/products/products-delete-409-prd-004-active-orders.png)
+
+---
+
+### 🛒 `Cart.API`
+
+#### 10. Sin carrito activo (`404 Not Found — CRT-001`)
+![Sin carrito activo](docs/Screenshots/cart/cart-get-404-crt-001-no-active-cart.png)
+
+---
+
+#### 11. Producto no existe en catálogo (`404 Not Found — CRT-002`)
+![Producto no existe en catálogo](docs/Screenshots/cart/cart-post-404-crt-002-product-not-found.png)
+
+---
+
+#### 12. Stock insuficiente (`422 Unprocessable Entity — CRT-003`)
+![Stock insuficiente](docs/Screenshots/cart/cart-post-422-crt-003-insufficient-stock.png)
+
+---
+
+#### 13. Cantidad inválida (`400 Bad Request — CRT-004`)
+![Cantidad inválida](docs/Screenshots/cart/cart-post-400-crt-004-invalid-quantity.png)
+
+---
+
+#### 14. Ítem agregado al carrito con éxito (`204 No Content`)
+![Ítem agregado al carrito](docs/Screenshots/cart/cart-post-204-success-add-item.png)
+
+---
+
+### 🔔 `Notifications.API`
+
+#### 15. Usuario destinatario no encontrado (`404 Not Found — NTF-001`)
+![Usuario destinatario no encontrado](docs/Screenshots/notifications/notifications-post-404-ntf-001-user-not-found.png)
+
+---
+
+#### 16. Tipo de notificación inválido (`400 Bad Request — NTF-002`)
+![Tipo de notificación inválido](docs/Screenshots/notifications/notifications-post-400-ntf-002-invalid-type.png)
+
+---
+
+#### 17. Notificación enviada con éxito (`201 Created`)
+![Notificación enviada](docs/Screenshots/notifications/notifications-post-201-success.png)
+
+---
+
+#### 18. Sin notificaciones para el usuario (`404 Not Found — NTF-003`)
+![Sin notificaciones](docs/Screenshots/notifications/notifications-get-404-ntf-003-no-notifications.png)
+
+---
+
+### 🧾 `Orders.API`
+
+#### 19. Orden Creada con Éxito (`201 Created`)
+![Orden creada exitosamente](docs/Screenshots/orders/orders-create-201-success.png)
+
+---
+
+#### 20. Usuario No Encontrado al Crear Orden (`404 ORD-003`)
+![Usuario no encontrado en Orders](docs/Screenshots/orders/orders-create-404-ord-003-user-not-found.png)
+
+---
+
+#### 21. Producto No Encontrado al Crear Orden (`404 ORD-004`)
+![Producto no encontrado en Orders](docs/Screenshots/orders/orders-create-404-ord-004-product-not-found.png)
+
+---
+
+#### 22. Stock Insuficiente al Crear Orden (`422 ORD-005`)
+![Stock insuficiente en Orders](docs/Screenshots/orders/orders-create-422-ord-005-insufficient-stock.png)
+
+---
+
+#### 23. Orden No Encontrada (`404 ORD-001`)
+![Orden no encontrada](docs/Screenshots/orders/orders-get-404-ord-001-order-not-found.png)
+
+---
+
+#### 24. Cambio de Estado Exitoso (`200 OK`)
+![Cambio de estado exitoso](docs/Screenshots/orders/orders-status-200-success.png)
+
+---
+
+#### 25. Transición de Estado Inválida (`409 ORD-006`)
+![Transición de estado inválida](docs/Screenshots/orders/orders-status-409-ord-006-invalid-transition.png)
+
+---
+
+#### 26. Estado No Reconocido (`400 ORD-002`)
+![Estado inválido en Orders](docs/Screenshots/orders/orders-status-400-ord-002-invalid-status.png)
+
+---
+
+#### 27. Error Interno en Orders (`500 ORD-007`)
+![Error interno en Orders](docs/Screenshots/orders/orders-create-500-ord-007-internal-error.png)
 
 ---
 
@@ -247,13 +442,22 @@ dotnet run --project src/Cart.API/Cart.API.csproj
 👉 Swagger UI: [http://localhost:5003/swagger](http://localhost:5003/swagger)
 👉 Health Checks: [http://localhost:5003/health](http://localhost:5003/health)
 
-### 6. Ejecutar `Notifications.API` (Puerto 5005)
+### 6. Ejecutar `Orders.API` (Puerto 5004)
+> ⚠️ Necesita que `Users.API` (:5002) y `Products.API` (:5001) estén levantados para validar usuario, productos y stock al crear una orden.
+
+```powershell
+dotnet run --project src/Orders.API/Orders.API.csproj
+```
+👉 Swagger UI: [http://localhost:5004/swagger](http://localhost:5004/swagger)
+👉 Health Checks: [http://localhost:5004/health](http://localhost:5004/health)
+
+### 7. Ejecutar `Notifications.API` (Puerto 5005)
 > ⚠️ Necesita que `Users.API` esté levantado al mismo tiempo para poder validar el destinatario.
 
 ```powershell
 dotnet run --project src/Notifications.API/Notifications.API.csproj
 ```
-👉 Swagger UI: [http://localhost:5005/swagger](http://localhost:5005/swagger)  
+👉 Swagger UI: [http://localhost:5005/swagger](http://localhost:5005/swagger)
 👉 Health Checks: [http://localhost:5005/health](http://localhost:5005/health)
 
 ### 💡 Levantar varios servicios a la vez desde Visual Studio
@@ -268,9 +472,9 @@ Todos los microservicios comparten la misma arquitectura limpia y modular requer
 ```
 src/{Servicio}.API/
 ├── Controllers/            # Controladores REST documentados con XML Comments
-├── Models/                 # Entidades del dominio (Product, User, Notification)
+├── Models/                 # Entidades del dominio (Product, User, Order, etc.)
 ├── DTOs/                   # Request, Response y ErrorResponse estructurado
-├── Services/               # Lógica de negocio (IProductService, IUserService, INotificationService)
+├── Services/               # Lógica de negocio (IProductService, IOrderService, etc.)
 ├── Data/                   # Repositorios en memoria con datos precargados
 ├── Exceptions/             # Excepciones tipadas de negocio (NotFound, Conflict, etc.)
 ├── ExceptionHandlers/      # Handlers individuales implementando IExceptionHandler
@@ -279,3 +483,27 @@ src/{Servicio}.API/
 ├── logs/                   # Archivos diarios de logs JSON estructurados (Serilog)
 └── Program.cs              # Inicialización de Serilog, Swagger, middlewares y health checks
 ```
+
+---
+
+## 🔁 Aspectos Transversales (Todos los Microservicios)
+
+### Trazabilidad con `X-Correlation-Id`
+Cada request entra al sistema con un encabezado `X-Correlation-Id`. Si no viene, se genera uno automáticamente (UUID v4). El encabezado viaja en la respuesta y se propaga en todas las llamadas HTTP internas entre microservicios (por ejemplo, cuando `Orders.API` llama a `Products.API`, incluye el mismo `X-Correlation-Id` para poder rastrear la cadena completa de llamadas en los logs).
+
+### Logs estructurados con Serilog
+Cada microservicio escribe logs en dos destinos simultáneos:
+- **Consola** — formato legible para el desarrollador durante el desarrollo.
+- **Archivo JSON** (`logs/log-YYYYMMDD.json`) — un archivo por día, formato estructurado apto para sistemas de análisis de logs.
+
+### Health Checks
+Cada servicio expone tres endpoints de salud:
+- `GET /health` — estado general (agrega todas las comprobaciones).
+- `GET /health/ready` — indica si el servicio está listo para recibir tráfico.
+- `GET /health/live` — indica si el proceso está vivo.
+
+### Manejo de errores con `IExceptionHandler`
+Todos los errores de negocio se lanzan como excepciones tipadas (`NotFoundException`, `ValidationException`, `BusinessRuleException`, `UnprocessableEntityException`) y son capturadas por handlers individuales que implementan `IExceptionHandler`. La respuesta siempre es un `ProblemDetails` enriquecido con los campos `errorCode` (p. ej. `ORD-001`) y `errorMessage`.
+
+### Persistencia en memoria
+Todos los microservicios usan repositorios en memoria (`List<T>` / `Dictionary<K,V>`). La cátedra proveerá una librería de persistencia real más adelante; cuando llegue, solo será necesario reemplazar los repositorios — el resto de la arquitectura (servicios, controladores, excepciones) no cambia.
