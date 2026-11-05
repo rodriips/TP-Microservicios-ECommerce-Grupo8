@@ -27,7 +27,6 @@ graph TD
     CartAPI -->|Valida Stock y Producto| ProductsAPI
     OrdersAPI -->|Valida Usuario Existente| UsersAPI
     OrdersAPI -->|Valida Productos y Stock| ProductsAPI
-    OrdersAPI -->|Dispara Notificación| NotificationsAPI
     ProductsAPI -->|Consulta órdenes activas antes de borrar| OrdersAPI
     NotificationsAPI -->|Valida que el destinatario exista| UsersAPI
 ```
