@@ -201,7 +201,7 @@ Viene precargada una notificación para **María** (`a1b2c3d4-0000-0000-0000-111
 > 💡 **¿Qué es este servicio?**
 > `Orders.API` es la **caja y el mostrador de pagos** de la tienda online.
 > 1. Cuando un cliente decide comprar, crea una orden con su ID de usuario y la lista de productos con sus cantidades.
-> 2. Antes de confirmarla, le pregunta a `Users.API` si ese usuario existe y está activo, y a `Products.API` si cada producto existe y tiene stock suficiente.
+> 2. Antes de confirmarla, le pregunta a `Users.API` si ese usuario existe, y a `Products.API` si cada producto existe y tiene stock suficiente.
 > 3. Una orden nace en estado **Pendiente** y avanza por un ciclo de vida estricto: `Pendiente → Confirmada → Enviada → Entregada`. También puede cancelarse desde `Pendiente` o `Confirmada`.
 > 4. Si alguien intenta hacer una transición prohibida (por ejemplo, pasar directamente de `Pendiente` a `Entregada`), el servicio lo rechaza con un error claro.
 
