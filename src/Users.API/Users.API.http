@@ -1,6 +1,29 @@
-@Users.API_HostAddress = http://localhost:5066
+@Users.API_HostAddress = http://localhost:5002
 
-GET {{Users.API_HostAddress}}/weatherforecast/
+### Listar usuarios
+GET {{Users.API_HostAddress}}/api/users
 Accept: application/json
 
-###
+### Obtener un usuario por id (María, precargada)
+GET {{Users.API_HostAddress}}/api/users/a1b2c3d4-0000-0000-0000-111122223333
+Accept: application/json
+
+### Registrar un usuario
+POST {{Users.API_HostAddress}}/api/users/register
+Content-Type: application/json
+
+{
+  "nombre": "Ana",
+  "apellido": "Pérez",
+  "email": "ana@email.com",
+  "password": "MiPassword123!"
+}
+
+### Login
+POST {{Users.API_HostAddress}}/api/users/login
+Content-Type: application/json
+
+{
+  "email": "ana@email.com",
+  "password": "MiPassword123!"
+}
