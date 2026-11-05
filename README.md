@@ -247,9 +247,9 @@ Viene precargada una notificación para **María** (`a1b2c3d4-0000-0000-0000-111
 | :---: | :---: | :--- | :--- |
 | **`ORD-001`** | `404 Not Found` | *Orden no encontrada.* | El ID consultado no existe. |
 | **`ORD-002`** | `400 Bad Request` | *Los datos de la orden son inválidos.* | Faltan campos obligatorios o el estado enviado no es reconocido. |
-| **`ORD-003`** | `404 Not Found` | *El usuario no fue encontrado.* | `Users.API` devuelve 404 para ese `usuarioId`. |
-| **`ORD-004`** | `404 Not Found` | *El producto no fue encontrado.* | `Products.API` devuelve 404 para uno de los productos del pedido. |
-| **`ORD-005`** | `422 Unprocessable Entity` | *Stock insuficiente para el producto '{id}'.* | La cantidad solicitada supera el stock disponible en `Products.API`. |
+| **`ORD-003`** | `404 Not Found` | *Usuario no encontrado al crear la orden.* | `Users.API` devuelve 404 para ese `usuarioId`. |
+| **`ORD-004`** | `404 Not Found` | *Producto no encontrado al crear la orden.* | `Products.API` devuelve 404 para uno de los productos del pedido. |
+| **`ORD-005`** | `422 Unprocessable Entity` | *Stock insuficiente para uno o más productos.* | La cantidad solicitada supera el stock disponible en `Products.API`. |
 | **`ORD-006`** | `409 Conflict` | *El estado de la orden no puede ser modificado.* | La transición de estado solicitada no está permitida (p. ej. `Enviada → Pendiente`). |
 | **`ORD-007`** | `500 Internal Server Error` | *Error interno al procesar la orden.* | Error no controlado en el servidor. |
 
