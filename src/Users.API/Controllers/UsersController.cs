@@ -82,7 +82,7 @@ public class UsersController : ControllerBase
     /// <response code="200">Usuario encontrado.</response>
     /// <response code="404">USR-007 - Usuario no encontrado.</response>
     /// <response code="500">USR-006 - Error interno al procesar el usuario.</response>
-    [HttpGet("{id:guid}")]
+    [HttpGet("{id}")]
     [ProducesResponseType(typeof(UserResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
