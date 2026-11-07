@@ -1,7 +1,5 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Microsoft.OpenApi.Models;
 using Serilog;
 using Serilog.Events;
 using Serilog.Formatting.Json;
@@ -40,10 +38,7 @@ try
     //    capturarlo en el controller y lanzar ValidationException (USR-002).
     // ============================================================
     builder.Services.AddControllers();
-    builder.Services.Configure<ApiBehaviorOptions>(options =>
-    {
-        options.SuppressModelStateInvalidFilter = true;
-    });
+    builder.Services.Configure<ApiBehaviorOptions>(Configuracion.ConfigurarValidacion);
 
     // ============================================================
     // 3. INYECCIÓN DE DEPENDENCIAS
@@ -69,27 +64,13 @@ try
     // 5. HEALTH CHECKS
     // ============================================================
     builder.Services.AddHealthChecks()
-        .AddCheck("self", () => HealthCheckResult.Healthy("Users.API está funcionando."));
+        .AddCheck<SelfHealthCheck>("self");
 
     // ============================================================
     // 6. SWAGGER con comentarios XML
     // ============================================================
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen(options =>
-    {
-        options.SwaggerDoc("v1", new OpenApiInfo
-        {
-            Title = "Users.API - ECommerce Microservices",
-            Version = "v1",
-            Description = "Microservicio de autenticación y gestión de usuarios para la plataforma de E-Commerce."
-        });
-
-        string rutaXml = Path.Combine(AppContext.BaseDirectory, "Users.API.xml");
-        if (File.Exists(rutaXml))
-        {
-            options.IncludeXmlComments(rutaXml);
-        }
-    });
+    builder.Services.AddSwaggerGen(Configuracion.ConfigurarSwagger);
 
     var app = builder.Build();
 
@@ -100,15 +81,8 @@ try
     app.UseSerilogRequestLogging();
     app.UseExceptionHandler();
 
-    app.UseSwagger(options =>
-    {
-        options.SerializeAsV2 = true;
-    });
-    app.UseSwaggerUI(options =>
-    {
-        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Users.API v1");
-        options.RoutePrefix = "swagger";
-    });
+    app.UseSwagger(Configuracion.ConfigurarSwaggerJson);
+    app.UseSwaggerUI(Configuracion.ConfigurarSwaggerUI);
 
     app.MapControllers();
 
@@ -123,7 +97,7 @@ try
     });
     app.MapHealthChecks("/health/live", new HealthCheckOptions
     {
-        Predicate = check => false,
+        Predicate = Configuracion.NingunCheck,
         ResponseWriter = HealthCheckResponseWriter.EscribirRespuesta
     });
 

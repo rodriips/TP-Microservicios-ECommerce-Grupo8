@@ -31,11 +31,10 @@ public class CorrelationIdMiddleware
 
         context.Items["CorrelationId"] = correlationId;
 
-        context.Response.OnStarting(() =>
-        {
-            context.Response.Headers[NombreHeader] = correlationId;
-            return Task.CompletedTask;
-        });
+        // El header se agrega justo antes de mandar la respuesta (ver AgregarHeader).
+        // Se hace así (y no directo acá) porque cuando hay un error ASP.NET borra los headers
+        // antes de llamar a los IExceptionHandler, y se perdería.
+        context.Response.OnStarting(AgregarHeader, context);
 
         string endpoint = context.Request.Method + " " + context.Request.Path;
 
@@ -45,5 +44,20 @@ public class CorrelationIdMiddleware
             _logger.LogInformation("Inicio request {Endpoint}", endpoint);
             await _next(context);
         }
+    }
+
+    /// <summary>
+    /// Se ejecuta justo antes de enviar la respuesta: copia el Correlation ID al header.
+    /// ASP.NET le pasa como parámetro el objeto que le dimos en OnStarting (el HttpContext).
+    /// </summary>
+    private static Task AgregarHeader(object estado)
+    {
+        HttpContext context = (HttpContext)estado;
+        string? correlationId = context.Items["CorrelationId"] as string;
+        if (correlationId != null)
+        {
+            context.Response.Headers[NombreHeader] = correlationId;
+        }
+        return Task.CompletedTask;
     }
 }
