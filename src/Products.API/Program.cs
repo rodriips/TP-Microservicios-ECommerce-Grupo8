@@ -1,7 +1,5 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Microsoft.OpenApi.Models;
 using Products.API.Common;
 using Products.API.Data;
 using Products.API.ExceptionHandlers;
@@ -31,7 +29,7 @@ try
 {
     Log.Information("Iniciando Products.API...");
 
-    var builder = WebApplication.CreateBuilder(args);
+    WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
     builder.Host.UseSerilog();
 
     // ============================================================
@@ -41,10 +39,7 @@ try
     //    mismo formato de error que el resto.
     // ============================================================
     builder.Services.AddControllers();
-    builder.Services.Configure<ApiBehaviorOptions>(options =>
-    {
-        options.SuppressModelStateInvalidFilter = true;
-    });
+    builder.Services.Configure<ApiBehaviorOptions>(Configuracion.ConfigurarValidacion);
 
     // ============================================================
     // 3. INYECCIÓN DE DEPENDENCIAS
@@ -55,13 +50,9 @@ try
     builder.Services.AddScoped<IProductService, ProductService>();
     builder.Services.AddHttpContextAccessor();
 
-    // Cliente HTTP para consultar Orders.API antes de eliminar (PRD-004)
-    string urlOrdersApi = builder.Configuration["Servicios:OrdersApi"] ?? "http://localhost:5004";
-    builder.Services.AddHttpClient("OrdersApi", client =>
-    {
-        client.BaseAddress = new Uri(urlOrdersApi);
-        client.Timeout = TimeSpan.FromSeconds(5);
-    });
+    // Cliente HTTP para consultar Orders.API antes de eliminar (PRD-004).
+    // La URL y el timeout se configuran en ProductService al crear el cliente.
+    builder.Services.AddHttpClient("OrdersApi");
 
     // ============================================================
     // 4. MANEJO DE ERRORES CON IExceptionHandler
@@ -75,32 +66,18 @@ try
 
     // ============================================================
     // 5. HEALTH CHECKS
-    //    "self" solo confirma que el servicio está levantado.
+    //    "self" solo confirma que el servicio está levantado (Common/SelfHealthCheck.cs).
     // ============================================================
-    builder.Services.AddHealthChecks()
-        .AddCheck("self", () => HealthCheckResult.Healthy("Products.API está funcionando."));
+    builder.Services.AddHealthChecks().AddCheck<SelfHealthCheck>("self");
 
     // ============================================================
     // 6. SWAGGER con los comentarios XML de controllers y DTOs
+    //    (la configuración está en Common/Configuracion.cs)
     // ============================================================
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen(options =>
-    {
-        options.SwaggerDoc("v1", new OpenApiInfo
-        {
-            Title = "Products.API - ECommerce Microservices",
-            Version = "v1",
-            Description = "Microservicio de catálogo de productos de la plataforma de E-Commerce."
-        });
+    builder.Services.AddSwaggerGen(Configuracion.ConfigurarSwagger);
 
-        string rutaXml = Path.Combine(AppContext.BaseDirectory, "Products.API.xml");
-        if (File.Exists(rutaXml))
-        {
-            options.IncludeXmlComments(rutaXml);
-        }
-    });
-
-    var app = builder.Build();
+    WebApplication app = builder.Build();
 
     // ============================================================
     // 7. PIPELINE (el orden importa)
@@ -109,15 +86,8 @@ try
     app.UseSerilogRequestLogging();               // loguea el fin de cada request con su duración
     app.UseExceptionHandler();                    // usa los IExceptionHandler registrados arriba
 
-    app.UseSwagger(options =>
-    {
-        options.SerializeAsV2 = true; // igual que en Users.API
-    });
-    app.UseSwaggerUI(options =>
-    {
-        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Products.API v1");
-        options.RoutePrefix = "swagger";
-    });
+    app.UseSwagger(Configuracion.ConfigurarSwaggerJson);
+    app.UseSwaggerUI(Configuracion.ConfigurarSwaggerUI);
 
     app.MapControllers();
 
@@ -133,7 +103,7 @@ try
     });
     app.MapHealthChecks("/health/live", new HealthCheckOptions
     {
-        Predicate = check => false,
+        Predicate = Configuracion.NingunCheck,
         ResponseWriter = HealthCheckResponseWriter.EscribirRespuesta
     });
 
