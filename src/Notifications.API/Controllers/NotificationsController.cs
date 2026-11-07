@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Notifications.API.Common;
 using Notifications.API.DTOs;
 using Notifications.API.Exceptions;
@@ -71,11 +72,11 @@ public class NotificationsController : ControllerBase
     /// </summary>
     private void ValidarDatos(NotificationRequest request)
     {
-        var errores = new List<string>();
+        List<string> errores = new List<string>();
 
-        foreach (var campo in ModelState.Values)
+        foreach (ModelStateEntry campo in ModelState.Values)
         {
-            foreach (var error in campo.Errors)
+            foreach (ModelError error in campo.Errors)
             {
                 errores.Add(error.ErrorMessage);
             }

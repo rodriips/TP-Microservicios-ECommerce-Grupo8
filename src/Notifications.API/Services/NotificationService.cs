@@ -16,17 +16,20 @@ public class NotificationService : INotificationService
     private readonly NotificationRepository _repository;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<NotificationService> _logger;
 
     public NotificationService(
         NotificationRepository repository,
         IHttpClientFactory httpClientFactory,
         IHttpContextAccessor httpContextAccessor,
+        IConfiguration configuration,
         ILogger<NotificationService> logger)
     {
         _repository = repository;
         _httpClientFactory = httpClientFactory;
         _httpContextAccessor = httpContextAccessor;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -39,7 +42,7 @@ public class NotificationService : INotificationService
         // NTF-001: el destinatario tiene que existir en Users.API
         await ValidarQueUsuarioExisteAsync(request.UsuarioId);
 
-        var notificacion = new Notification
+        Notification notificacion = new Notification
         {
             Id = Guid.NewGuid(),
             UsuarioId = request.UsuarioId,
@@ -70,8 +73,8 @@ public class NotificationService : INotificationService
             throw new NotFoundException(ErrorCodes.NTF_003, "No se encontraron notificaciones para el usuario.");
         }
 
-        var resultado = new List<NotificationResponse>();
-        foreach (var notificacion in notificaciones)
+        List<NotificationResponse> resultado = new List<NotificationResponse>();
+        foreach (Notification notificacion in notificaciones)
         {
             resultado.Add(ConvertirAResponse(notificacion));
         }
@@ -93,7 +96,7 @@ public class NotificationService : INotificationService
         // Tipos permitidos (Apéndice A de la consigna)
         string[] tiposValidos = { "Email", "Push", "SMS" };
 
-        foreach (var tipoValido in tiposValidos)
+        foreach (string tipoValido in tiposValidos)
         {
             if (string.Equals(tipoValido, tipo.Trim(), StringComparison.OrdinalIgnoreCase))
             {
@@ -115,8 +118,8 @@ public class NotificationService : INotificationService
     /// </summary>
     private async Task ValidarQueUsuarioExisteAsync(Guid usuarioId)
     {
-        HttpClient client = _httpClientFactory.CreateClient("UsersApi");
-        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/users/{usuarioId}");
+        HttpClient client = CrearClienteUsers();
+        HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, $"/api/users/{usuarioId}");
 
         // Propagamos el Correlation ID a Users.API (sección 5.5 de la consigna).
         // Lo guardó el CorrelationIdMiddleware al inicio del request.
@@ -156,6 +159,25 @@ public class NotificationService : INotificationService
         }
 
         _logger.LogInformation("Usuario {UsuarioId} validado contra Users.API", usuarioId);
+    }
+
+    /// <summary>
+    /// Crea el cliente HTTP para Users.API con su URL y un timeout de 5 segundos.
+    /// La URL se lee de appsettings.json ("Servicios:UsersApi");
+    /// si no está configurada, se usa el puerto 5002 de la tabla de puertos.
+    /// </summary>
+    private HttpClient CrearClienteUsers()
+    {
+        string? urlUsersApi = _configuration["Servicios:UsersApi"];
+        if (string.IsNullOrWhiteSpace(urlUsersApi))
+        {
+            urlUsersApi = "http://localhost:5002";
+        }
+
+        HttpClient client = _httpClientFactory.CreateClient("UsersApi");
+        client.BaseAddress = new Uri(urlUsersApi);
+        client.Timeout = TimeSpan.FromSeconds(5);
+        return client;
     }
 
     private static NotificationResponse ConvertirAResponse(Notification notificacion)

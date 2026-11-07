@@ -27,7 +27,7 @@ public class NotFoundExceptionHandler : IExceptionHandler
         // Error de negocio: se loguea como Warning, con su errorCode
         _logger.LogWarning("[{ErrorCode}] {ErrorMessage}", ex.ErrorCode, ex.Message);
 
-        var error = new ErrorResponse
+        ErrorResponse error = new ErrorResponse
         {
             Type = "https://tools.ietf.org/html/rfc7231#section-6.5.4",
             Title = "Not Found",

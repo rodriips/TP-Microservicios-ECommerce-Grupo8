@@ -1,7 +1,5 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Microsoft.OpenApi.Models;
 using Notifications.API.Common;
 using Notifications.API.Data;
 using Notifications.API.ExceptionHandlers;
@@ -31,7 +29,7 @@ try
 {
     Log.Information("Iniciando Notifications.API...");
 
-    var builder = WebApplication.CreateBuilder(args);
+    WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
     builder.Host.UseSerilog();
 
     // ============================================================
@@ -41,10 +39,7 @@ try
     //    mismo formato de error que el resto.
     // ============================================================
     builder.Services.AddControllers();
-    builder.Services.Configure<ApiBehaviorOptions>(options =>
-    {
-        options.SuppressModelStateInvalidFilter = true;
-    });
+    builder.Services.Configure<ApiBehaviorOptions>(Configuracion.ConfigurarValidacion);
 
     // ============================================================
     // 3. INYECCIÓN DE DEPENDENCIAS
@@ -55,13 +50,9 @@ try
     builder.Services.AddScoped<INotificationService, NotificationService>();
     builder.Services.AddHttpContextAccessor();
 
-    // Cliente HTTP para validar el destinatario contra Users.API (NTF-001)
-    string urlUsersApi = builder.Configuration["Servicios:UsersApi"] ?? "http://localhost:5002";
-    builder.Services.AddHttpClient("UsersApi", client =>
-    {
-        client.BaseAddress = new Uri(urlUsersApi);
-        client.Timeout = TimeSpan.FromSeconds(5);
-    });
+    // Cliente HTTP para validar el destinatario contra Users.API (NTF-001).
+    // La URL y el timeout se configuran en NotificationService al crear el cliente.
+    builder.Services.AddHttpClient("UsersApi");
 
     // ============================================================
     // 4. MANEJO DE ERRORES CON IExceptionHandler
@@ -74,32 +65,18 @@ try
 
     // ============================================================
     // 5. HEALTH CHECKS
-    //    "self" solo confirma que el servicio está levantado.
+    //    "self" solo confirma que el servicio está levantado (Common/SelfHealthCheck.cs).
     // ============================================================
-    builder.Services.AddHealthChecks()
-        .AddCheck("self", () => HealthCheckResult.Healthy("Notifications.API está funcionando."));
+    builder.Services.AddHealthChecks().AddCheck<SelfHealthCheck>("self");
 
     // ============================================================
     // 6. SWAGGER con los comentarios XML de controllers y DTOs
+    //    (la configuración está en Common/Configuracion.cs)
     // ============================================================
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen(options =>
-    {
-        options.SwaggerDoc("v1", new OpenApiInfo
-        {
-            Title = "Notifications.API - ECommerce Microservices",
-            Version = "v1",
-            Description = "Microservicio de notificaciones (envío simulado por Email, Push o SMS) de la plataforma de E-Commerce."
-        });
+    builder.Services.AddSwaggerGen(Configuracion.ConfigurarSwagger);
 
-        string rutaXml = Path.Combine(AppContext.BaseDirectory, "Notifications.API.xml");
-        if (File.Exists(rutaXml))
-        {
-            options.IncludeXmlComments(rutaXml);
-        }
-    });
-
-    var app = builder.Build();
+    WebApplication app = builder.Build();
 
     // ============================================================
     // 7. PIPELINE (el orden importa)
@@ -108,15 +85,8 @@ try
     app.UseSerilogRequestLogging();               // loguea el fin de cada request con su duración
     app.UseExceptionHandler();                    // usa los IExceptionHandler registrados arriba
 
-    app.UseSwagger(options =>
-    {
-        options.SerializeAsV2 = true; // igual que en Users.API y Products.API
-    });
-    app.UseSwaggerUI(options =>
-    {
-        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Notifications.API v1");
-        options.RoutePrefix = "swagger";
-    });
+    app.UseSwagger(Configuracion.ConfigurarSwaggerJson);
+    app.UseSwaggerUI(Configuracion.ConfigurarSwaggerUI);
 
     app.MapControllers();
 
@@ -132,7 +102,7 @@ try
     });
     app.MapHealthChecks("/health/live", new HealthCheckOptions
     {
-        Predicate = check => false,
+        Predicate = Configuracion.NingunCheck,
         ResponseWriter = HealthCheckResponseWriter.EscribirRespuesta
     });
 

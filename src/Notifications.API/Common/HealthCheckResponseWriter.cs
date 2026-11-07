@@ -11,8 +11,8 @@ public static class HealthCheckResponseWriter
 {
     public static Task EscribirRespuesta(HttpContext context, HealthReport reporte)
     {
-        var checks = new List<HealthCheckItem>();
-        foreach (var entrada in reporte.Entries)
+        List<HealthCheckItem> checks = new List<HealthCheckItem>();
+        foreach (KeyValuePair<string, HealthReportEntry> entrada in reporte.Entries)
         {
             checks.Add(new HealthCheckItem
             {
@@ -22,7 +22,7 @@ public static class HealthCheckResponseWriter
             });
         }
 
-        var respuesta = new HealthCheckRespuesta
+        HealthCheckRespuesta respuesta = new HealthCheckRespuesta
         {
             Status = reporte.Status.ToString(), // Healthy, Degraded o Unhealthy
             Servicio = "Notifications.API",

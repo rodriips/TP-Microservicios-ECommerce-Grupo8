@@ -28,8 +28,8 @@ public class NotificationRepository
 
     public List<Notification> ObtenerPorUsuario(Guid usuarioId)
     {
-        var resultado = new List<Notification>();
-        foreach (var notificacion in _notificaciones)
+        List<Notification> resultado = new List<Notification>();
+        foreach (Notification notificacion in _notificaciones)
         {
             if (notificacion.UsuarioId == usuarioId)
             {
