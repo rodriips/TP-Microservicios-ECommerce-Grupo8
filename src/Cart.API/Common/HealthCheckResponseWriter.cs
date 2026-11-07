@@ -1,33 +1,48 @@
-using System.Text.Json;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace Cart.API.Common;
 
 /// <summary>
-/// Formatea las respuestas de los health checks en JSON estructurado (sección 5.4 de la consigna).
+/// Arma la respuesta JSON de los endpoints /health.
+/// Por defecto ASP.NET devuelve solo el texto "Healthy"; la consigna pide JSON.
 /// </summary>
 public static class HealthCheckResponseWriter
 {
-    public static Task WriteResponse(HttpContext context, HealthReport report)
+    public static Task EscribirRespuesta(HttpContext context, HealthReport reporte)
     {
-        context.Response.ContentType = "application/json";
-
-        var response = new
+        var checks = new List<HealthCheckItem>();
+        foreach (var entrada in reporte.Entries)
         {
-            status = report.Status.ToString(),
-            servicio = "Cart.API",
-            checks = report.Entries.Select(e => new
+            checks.Add(new HealthCheckItem
             {
-                nombre = e.Key,
-                status = e.Value.Status.ToString(),
-                descripcion = e.Value.Description,
-                duracion = e.Value.Duration.TotalMilliseconds + " ms"
-            })
+                Nombre = entrada.Key,
+                Status = entrada.Value.Status.ToString(),
+                Descripcion = entrada.Value.Description
+            });
+        }
+
+        var respuesta = new HealthCheckRespuesta
+        {
+            Status = reporte.Status.ToString(), // Healthy, Degraded o Unhealthy
+            Servicio = "Cart.API",
+            Checks = checks
         };
 
-        return context.Response.WriteAsync(JsonSerializer.Serialize(response, new JsonSerializerOptions
-        {
-            WriteIndented = true
-        }));
+        context.Response.ContentType = "application/json";
+        return context.Response.WriteAsJsonAsync(respuesta);
     }
+}
+
+public class HealthCheckRespuesta
+{
+    public string Status { get; set; } = string.Empty;
+    public string Servicio { get; set; } = string.Empty;
+    public List<HealthCheckItem> Checks { get; set; } = new List<HealthCheckItem>();
+}
+
+public class HealthCheckItem
+{
+    public string Nombre { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public string? Descripcion { get; set; }
 }
