@@ -1,6 +1,4 @@
-using System.Linq;
 using System.Net.Http.Json;
-using System.Text.Json;
 using Orders.API.Common;
 using Orders.API.Data;
 using Orders.API.DTOs;
@@ -18,47 +16,38 @@ namespace Orders.API.Services;
 /// </summary>
 public class OrderService : IOrderService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
-
-    // Transiciones de estado permitidas. Pendiente -> Confirmada -> Enviada -> Entregada,
-    // con Cancelada posible desde Pendiente o Confirmada. Entregada y Cancelada son estados finales.
-    private static readonly Dictionary<string, string[]> TransicionesValidas = new()
-    {
-        ["Pendiente"] = new[] { "Confirmada", "Cancelada" },
-        ["Confirmada"] = new[] { "Enviada", "Cancelada" },
-        ["Enviada"] = new[] { "Entregada" },
-        ["Entregada"] = Array.Empty<string>(),
-        ["Cancelada"] = Array.Empty<string>()
-    };
-
     private readonly OrderRepository _repository;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<OrderService> _logger;
 
     public OrderService(
         OrderRepository repository,
         IHttpClientFactory httpClientFactory,
         IHttpContextAccessor httpContextAccessor,
+        IConfiguration configuration,
         ILogger<OrderService> logger)
     {
         _repository = repository;
         _httpClientFactory = httpClientFactory;
         _httpContextAccessor = httpContextAccessor;
+        _configuration = configuration;
         _logger = logger;
     }
 
+    // Devuelve todas las órdenes; si viene usuarioId, solo las de ese usuario.
     public List<OrderResponse> ObtenerTodos(Guid? usuarioId)
     {
-        var resultado = new List<OrderResponse>();
+        List<OrderResponse> resultado = new List<OrderResponse>();
 
-        foreach (var orden in _repository.ObtenerTodos())
+        foreach (Order orden in _repository.ObtenerTodos())
         {
+            // Si pidieron filtrar por usuario y esta orden es de otro, la salteamos
             if (usuarioId.HasValue && orden.UsuarioId != usuarioId.Value)
+            {
                 continue;
+            }
 
             resultado.Add(ConvertirAResponse(orden));
         }
@@ -67,22 +56,29 @@ public class OrderService : IOrderService
         return resultado;
     }
 
+    // Devuelve una orden por Id (si no existe, BuscarOrdenOFallar lanza ORD-001).
     public OrderResponse ObtenerPorId(Guid id)
     {
-        var orden = BuscarOrdenOFallar(id);
+        Order orden = BuscarOrdenOFallar(id);
         return ConvertirAResponse(orden);
     }
 
+    // Crea una orden: valida el usuario, suma productos repetidos, valida cada producto y su stock.
     public async Task<OrderResponse> CrearAsync(CrearOrdenRequest request)
     {
+        // 1) El usuario tiene que existir en Users.API (si no, ORD-003)
         await ValidarUsuarioExisteAsync(request.UsuarioId);
 
-        var items = new List<OrderItem>();
+        // 2) Si un producto vino repetido, juntamos sus cantidades en un solo item
+        List<OrderItemRequest> itemsSumados = SumarCantidadesRepetidas(request.Items);
+
+        List<OrderItem> items = new List<OrderItem>();
         decimal total = 0;
 
-        foreach (var itemRequest in request.Items)
+        // 3) Por cada producto distinto: existe (ORD-004) y alcanza el stock (ORD-005)
+        foreach (OrderItemRequest itemRequest in itemsSumados)
         {
-            var producto = await ObtenerProductoOFallarAsync(itemRequest.ProductoId);
+            ProductoInfo producto = await ObtenerProductoOFallarAsync(itemRequest.ProductoId);
 
             if (producto.Stock < itemRequest.Cantidad)
             {
@@ -92,25 +88,23 @@ public class OrderService : IOrderService
                     "No se puede procesar la solicitud.");
             }
 
-            items.Add(new OrderItem
-            {
-                ProductoId = producto.Id,
-                Cantidad = itemRequest.Cantidad,
-                PrecioUnitario = producto.Precio
-            });
+            OrderItem item = new OrderItem();
+            item.ProductoId = producto.Id;
+            item.Cantidad = itemRequest.Cantidad;
+            item.PrecioUnitario = producto.Precio;
+            items.Add(item);
 
             total += producto.Precio * itemRequest.Cantidad;
         }
 
-        var orden = new Order
-        {
-            Id = Guid.NewGuid(),
-            UsuarioId = request.UsuarioId,
-            Items = items,
-            Total = total,
-            Estado = "Pendiente",
-            FechaCreacion = DateTime.UtcNow
-        };
+        // 4) Armamos la orden con estado inicial Pendiente y la guardamos
+        Order orden = new Order();
+        orden.Id = Guid.NewGuid();
+        orden.UsuarioId = request.UsuarioId;
+        orden.Items = items;
+        orden.Total = total;
+        orden.Estado = "Pendiente";
+        orden.FechaCreacion = DateTime.UtcNow;
 
         _repository.Agregar(orden);
         _logger.LogInformation("Orden {OrdenId} creada para el usuario {UsuarioId}", orden.Id, orden.UsuarioId);
@@ -118,21 +112,27 @@ public class OrderService : IOrderService
         return ConvertirAResponse(orden);
     }
 
+    // Cambia el estado de una orden si el estado existe (ORD-002) y la transición es válida (ORD-006).
     public CambiarEstadoResponse CambiarEstado(Guid id, CambiarEstadoRequest request)
     {
-        var orden = BuscarOrdenOFallar(id);
-        var nuevoEstado = request.Estado;
+        Order orden = BuscarOrdenOFallar(id);
 
-        if (!TransicionesValidas.ContainsKey(nuevoEstado))
+        // Estado que escribió la persona (puede venir en minúsculas)
+        string estadoEscrito = request.Estado;
+
+        // El estado tiene que ser uno de los 5 conocidos
+        if (!EsEstadoValido(estadoEscrito))
         {
             throw new ValidationException(
                 ErrorCodes.ORD_002,
-                $"'{nuevoEstado}' no es un estado válido. Los valores permitidos son: Pendiente, Confirmada, Enviada, Entregada, Cancelada.");
+                $"'{estadoEscrito}' no es un estado válido. Los valores permitidos son: Pendiente, Confirmada, Enviada, Entregada, Cancelada.");
         }
 
-        var estadosPermitidos = TransicionesValidas[orden.Estado];
+        // Lo guardamos siempre con la mayúscula correcta ("enviada" -> "Enviada")
+        string nuevoEstado = NormalizarEstado(estadoEscrito);
 
-        if (!estadosPermitidos.Contains(nuevoEstado))
+        // La transición tiene que estar permitida desde el estado actual
+        if (!EsTransicionValida(orden.Estado, nuevoEstado))
         {
             throw new BusinessRuleException(
                 ErrorCodes.ORD_006,
@@ -140,38 +140,139 @@ public class OrderService : IOrderService
                 "No se puede modificar el estado.");
         }
 
+        // Guardamos la fecha en una variable para usar exactamente la misma en la orden y en la respuesta
+        DateTime ahora = DateTime.UtcNow;
         orden.Estado = nuevoEstado;
-        orden.FechaActualizacion = DateTime.UtcNow;
+        orden.FechaActualizacion = ahora;
 
         _logger.LogInformation("Orden {OrdenId} cambió a estado {Estado}", orden.Id, orden.Estado);
 
-        return new CambiarEstadoResponse
-        {
-            Id = orden.Id,
-            Estado = orden.Estado,
-            FechaActualizacion = orden.FechaActualizacion!.Value
-        };
+        CambiarEstadoResponse respuesta = new CambiarEstadoResponse();
+        respuesta.Id = orden.Id;
+        respuesta.Estado = orden.Estado;
+        respuesta.FechaActualizacion = ahora;
+        return respuesta;
     }
 
+    // Devuelve true si el texto es uno de los 5 estados (sin importar mayúsculas).
+    private bool EsEstadoValido(string estado)
+    {
+        return NormalizarEstado(estado) != "";
+    }
+
+    // Devuelve el estado con su mayúscula correcta, o "" si no es un estado conocido.
+    private string NormalizarEstado(string estado)
+    {
+        string minusculas = estado.Trim().ToLower();
+
+        if (minusculas == "pendiente")
+        {
+            return "Pendiente";
+        }
+
+        if (minusculas == "confirmada")
+        {
+            return "Confirmada";
+        }
+
+        if (minusculas == "enviada")
+        {
+            return "Enviada";
+        }
+
+        if (minusculas == "entregada")
+        {
+            return "Entregada";
+        }
+
+        if (minusculas == "cancelada")
+        {
+            return "Cancelada";
+        }
+
+        return "";
+    }
+
+    // Reglas del flujo: Pendiente -> Confirmada -> Enviada -> Entregada, y Cancelada desde Pendiente o Confirmada.
+    private bool EsTransicionValida(string actual, string nuevo)
+    {
+        if (actual == "Pendiente")
+        {
+            return nuevo == "Confirmada" || nuevo == "Cancelada";
+        }
+
+        if (actual == "Confirmada")
+        {
+            return nuevo == "Enviada" || nuevo == "Cancelada";
+        }
+
+        if (actual == "Enviada")
+        {
+            return nuevo == "Entregada";
+        }
+
+        // Entregada y Cancelada son estados finales: no se puede salir de ahí
+        return false;
+    }
+
+    // Junta en un solo item los productos repetidos, sumando sus cantidades.
+    // Ej: [A x6, A x6] queda [A x12]. No modifica la lista original.
+    private List<OrderItemRequest> SumarCantidadesRepetidas(List<OrderItemRequest> items)
+    {
+        List<OrderItemRequest> resultado = new List<OrderItemRequest>();
+
+        foreach (OrderItemRequest item in items)
+        {
+            bool yaEstaba = false;
+
+            // Buscamos si ese producto ya está en la lista nueva
+            foreach (OrderItemRequest existente in resultado)
+            {
+                if (existente.ProductoId == item.ProductoId)
+                {
+                    existente.Cantidad = existente.Cantidad + item.Cantidad;
+                    yaEstaba = true;
+                }
+            }
+
+            // Si no estaba, lo agregamos (como copia, para no tocar el request original)
+            if (!yaEstaba)
+            {
+                OrderItemRequest copia = new OrderItemRequest();
+                copia.ProductoId = item.ProductoId;
+                copia.Cantidad = item.Cantidad;
+                resultado.Add(copia);
+            }
+        }
+
+        return resultado;
+    }
+
+    // Busca una orden por Id; si no existe lanza NotFoundException (ORD-001 -> 404).
     private Order BuscarOrdenOFallar(Guid id)
     {
-        var orden = _repository.ObtenerPorId(id);
+        Order? orden = _repository.ObtenerPorId(id);
 
-        if (orden is null)
+        if (orden == null)
+        {
             throw new NotFoundException(ErrorCodes.ORD_001, "Orden no encontrada.");
+        }
 
         return orden;
     }
 
+    // Le pregunta a Users.API si el usuario existe. Si responde 404 -> ORD-003.
     private async Task ValidarUsuarioExisteAsync(Guid usuarioId)
     {
-        var cliente = _httpClientFactory.CreateClient("UsersApi");
+        HttpClient cliente = CrearCliente("UsersApi", "http://localhost:5002");
         AgregarCorrelationId(cliente);
 
-        var respuesta = await cliente.GetAsync($"/api/users/{usuarioId}");
+        HttpResponseMessage respuesta = await cliente.GetAsync($"/api/users/{usuarioId}");
 
         if (respuesta.IsSuccessStatusCode)
+        {
             return;
+        }
 
         if (respuesta.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
@@ -184,12 +285,13 @@ public class OrderService : IOrderService
             $"Users.API respondió {(int)respuesta.StatusCode} al validar el usuario {usuarioId}.");
     }
 
+    // Le pide a Products.API los datos del producto (precio y stock). Si responde 404 -> ORD-004.
     private async Task<ProductoInfo> ObtenerProductoOFallarAsync(Guid productoId)
     {
-        var cliente = _httpClientFactory.CreateClient("ProductsApi");
+        HttpClient cliente = CrearCliente("ProductsApi", "http://localhost:5001");
         AgregarCorrelationId(cliente);
 
-        var respuesta = await cliente.GetAsync($"/api/products/{productoId}");
+        HttpResponseMessage respuesta = await cliente.GetAsync($"/api/products/{productoId}");
 
         if (respuesta.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
@@ -202,9 +304,10 @@ public class OrderService : IOrderService
                 $"Products.API respondió {(int)respuesta.StatusCode} al consultar el producto {productoId}.");
         }
 
-        var producto = await respuesta.Content.ReadFromJsonAsync<ProductoInfo>(JsonOptions);
+        // Convierte el JSON de Products.API en un objeto ProductoInfo
+        ProductoInfo? producto = await respuesta.Content.ReadFromJsonAsync<ProductoInfo>();
 
-        if (producto is null)
+        if (producto == null)
         {
             throw new InvalidOperationException(
                 $"Products.API devolvió un body vacío para el producto {productoId}.");
@@ -213,32 +316,61 @@ public class OrderService : IOrderService
         return producto;
     }
 
+    // Crea el cliente HTTP hacia otro servicio. La URL se lee de appsettings.json
+    // (sección "Servicios"); si no está, se usa la URL por defecto. Espera máximo 5 segundos.
+    private HttpClient CrearCliente(string nombre, string urlPorDefecto)
+    {
+        HttpClient cliente = _httpClientFactory.CreateClient(nombre);
+
+        string? url = _configuration["Servicios:" + nombre];
+        if (url == null)
+        {
+            url = urlPorDefecto;
+        }
+
+        cliente.BaseAddress = new Uri(url);
+        cliente.Timeout = TimeSpan.FromSeconds(5);
+        return cliente;
+    }
+
+    // Copia el X-Correlation-Id del pedido actual al pedido que le hacemos a otro servicio.
     private void AgregarCorrelationId(HttpClient cliente)
     {
-        var correlationId = _httpContextAccessor.HttpContext?.Items["CorrelationId"] as string;
+        HttpContext? contexto = _httpContextAccessor.HttpContext;
 
-        if (!string.IsNullOrWhiteSpace(correlationId))
+        if (contexto != null)
         {
-            cliente.DefaultRequestHeaders.Remove("X-Correlation-Id");
-            cliente.DefaultRequestHeaders.Add("X-Correlation-Id", correlationId);
+            string? correlationId = contexto.Items["CorrelationId"] as string;
+
+            if (!string.IsNullOrWhiteSpace(correlationId))
+            {
+                cliente.DefaultRequestHeaders.Remove("X-Correlation-Id");
+                cliente.DefaultRequestHeaders.Add("X-Correlation-Id", correlationId);
+            }
         }
     }
 
+    // Convierte una Order (modelo interno) en OrderResponse (lo que se devuelve en el JSON).
     private static OrderResponse ConvertirAResponse(Order orden)
     {
-        return new OrderResponse
+        List<OrderItemResponse> items = new List<OrderItemResponse>();
+
+        foreach (OrderItem item in orden.Items)
         {
-            Id = orden.Id,
-            UsuarioId = orden.UsuarioId,
-            Items = orden.Items.Select(i => new OrderItemResponse
-            {
-                ProductoId = i.ProductoId,
-                Cantidad = i.Cantidad,
-                PrecioUnitario = i.PrecioUnitario
-            }).ToList(),
-            Total = orden.Total,
-            Estado = orden.Estado,
-            FechaCreacion = orden.FechaCreacion
-        };
+            OrderItemResponse itemResponse = new OrderItemResponse();
+            itemResponse.ProductoId = item.ProductoId;
+            itemResponse.Cantidad = item.Cantidad;
+            itemResponse.PrecioUnitario = item.PrecioUnitario;
+            items.Add(itemResponse);
+        }
+
+        OrderResponse respuesta = new OrderResponse();
+        respuesta.Id = orden.Id;
+        respuesta.UsuarioId = orden.UsuarioId;
+        respuesta.Items = items;
+        respuesta.Total = orden.Total;
+        respuesta.Estado = orden.Estado;
+        respuesta.FechaCreacion = orden.FechaCreacion;
+        return respuesta;
     }
 }
