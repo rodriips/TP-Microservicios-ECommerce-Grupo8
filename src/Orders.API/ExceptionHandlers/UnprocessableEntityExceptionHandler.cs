@@ -16,12 +16,15 @@ public class UnprocessableEntityExceptionHandler : IExceptionHandler
 
     public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken cancellationToken)
     {
+        // Si no es de mi tipo, paso al siguiente handler
         if (exception is not UnprocessableEntityException ex)
+        {
             return false;
+        }
 
         _logger.LogWarning("[{ErrorCode}] {ErrorMessage}", ex.ErrorCode, ex.Message);
 
-        var error = new ErrorResponse
+        ErrorResponse error = new ErrorResponse
         {
             Type = "https://tools.ietf.org/html/rfc4918#section-11.2",
             Title = "Unprocessable Entity",

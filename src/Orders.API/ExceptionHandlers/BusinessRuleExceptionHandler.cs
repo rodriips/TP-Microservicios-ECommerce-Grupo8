@@ -16,12 +16,15 @@ public class BusinessRuleExceptionHandler : IExceptionHandler
 
     public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken cancellationToken)
     {
+        // Si no es de mi tipo, paso al siguiente handler
         if (exception is not BusinessRuleException ex)
+        {
             return false;
+        }
 
         _logger.LogWarning("[{ErrorCode}] {ErrorMessage}", ex.ErrorCode, ex.Message);
 
-        var error = new ErrorResponse
+        ErrorResponse error = new ErrorResponse
         {
             Type = "https://tools.ietf.org/html/rfc7231#section-6.5.9",
             Title = "Conflict",

@@ -9,9 +9,9 @@ public static class HealthCheckResponseWriter
 {
     public static Task EscribirRespuesta(HttpContext context, HealthReport reporte)
     {
-        var checks = new List<HealthCheckItem>();
+        List<HealthCheckItem> checks = new List<HealthCheckItem>();
 
-        foreach (var entrada in reporte.Entries)
+        foreach (KeyValuePair<string, HealthReportEntry> entrada in reporte.Entries)
         {
             checks.Add(new HealthCheckItem
             {
@@ -21,7 +21,7 @@ public static class HealthCheckResponseWriter
             });
         }
 
-        var respuesta = new HealthCheckRespuesta
+        HealthCheckRespuesta respuesta = new HealthCheckRespuesta
         {
             Status = reporte.Status.ToString(),
             Servicio = "Orders.API",
@@ -37,7 +37,7 @@ public class HealthCheckRespuesta
 {
     public string Status { get; set; } = string.Empty;
     public string Servicio { get; set; } = string.Empty;
-    public List<HealthCheckItem> Checks { get; set; } = new();
+    public List<HealthCheckItem> Checks { get; set; } = new List<HealthCheckItem>();
 }
 
 public class HealthCheckItem
