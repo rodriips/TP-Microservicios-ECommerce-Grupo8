@@ -47,14 +47,19 @@ public class ProductRepository
         });
     }
 
+    /// <summary>
+    /// Devuelve una COPIA de la lista, para que nadie de afuera pueda
+    /// agregar o quitar productos sin pasar por este repositorio.
+    /// </summary>
     public List<Product> ObtenerTodos()
     {
-        return _productos;
+        List<Product> copia = new List<Product>(_productos);
+        return copia;
     }
 
     public Product? ObtenerPorId(Guid id)
     {
-        foreach (var producto in _productos)
+        foreach (Product producto in _productos)
         {
             if (producto.Id == id)
             {

@@ -35,11 +35,8 @@ public class CorrelationIdMiddleware
         // El header se agrega justo antes de mandar la respuesta. Se hace así (y no
         // directamente acá) porque cuando hay un error ASP.NET borra los headers
         // antes de llamar a los IExceptionHandler, y se perdería.
-        context.Response.OnStarting(() =>
-        {
-            context.Response.Headers[NombreHeader] = correlationId;
-            return Task.CompletedTask;
-        });
+        // Le pasamos el nombre del método (AgregarHeader) y el context.
+        context.Response.OnStarting(AgregarHeader, context);
 
         string endpoint = context.Request.Method + " " + context.Request.Path;
 
@@ -49,5 +46,17 @@ public class CorrelationIdMiddleware
             _logger.LogInformation("Inicio request {Endpoint}", endpoint);
             await _next(context);
         }
+    }
+
+    /// <summary>
+    /// ASP.NET llama a este método justo antes de mandar la respuesta.
+    /// Recibe el context como "object", por eso lo convertimos a HttpContext.
+    /// </summary>
+    private static Task AgregarHeader(object estado)
+    {
+        HttpContext context = (HttpContext)estado;
+        string? correlationId = context.Items["CorrelationId"] as string;
+        context.Response.Headers[NombreHeader] = correlationId;
+        return Task.CompletedTask;
     }
 }

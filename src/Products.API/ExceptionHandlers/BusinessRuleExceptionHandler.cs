@@ -25,7 +25,7 @@ public class BusinessRuleExceptionHandler : IExceptionHandler
 
         _logger.LogWarning("[{ErrorCode}] {ErrorMessage}", ex.ErrorCode, ex.Message);
 
-        var error = new ErrorResponse
+        ErrorResponse error = new ErrorResponse
         {
             Type = "https://tools.ietf.org/html/rfc7231#section-6.5.9",
             Title = "Conflict",

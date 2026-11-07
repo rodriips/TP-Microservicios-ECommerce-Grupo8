@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Products.API.Common;
 using Products.API.DTOs;
 using Products.API.Exceptions;
@@ -135,10 +136,10 @@ public class ProductsController : ControllerBase
             return;
         }
 
-        var errores = new List<string>();
-        foreach (var campo in ModelState.Values)
+        List<string> errores = new List<string>();
+        foreach (ModelStateEntry campo in ModelState.Values)
         {
-            foreach (var error in campo.Errors)
+            foreach (ModelError error in campo.Errors)
             {
                 errores.Add(error.ErrorMessage);
             }

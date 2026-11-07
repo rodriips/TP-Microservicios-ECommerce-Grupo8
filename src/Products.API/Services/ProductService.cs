@@ -15,25 +15,28 @@ public class ProductService : IProductService
     private readonly ProductRepository _repository;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<ProductService> _logger;
 
     public ProductService(
         ProductRepository repository,
         IHttpClientFactory httpClientFactory,
         IHttpContextAccessor httpContextAccessor,
+        IConfiguration configuration,
         ILogger<ProductService> logger)
     {
         _repository = repository;
         _httpClientFactory = httpClientFactory;
         _httpContextAccessor = httpContextAccessor;
+        _configuration = configuration;
         _logger = logger;
     }
 
     public List<ProductResponse> ObtenerTodos(string? categoria, string? nombre)
     {
-        var resultado = new List<ProductResponse>();
+        List<ProductResponse> resultado = new List<ProductResponse>();
 
-        foreach (var producto in _repository.ObtenerTodos())
+        foreach (Product producto in _repository.ObtenerTodos())
         {
             // Filtro ?categoria= (igualdad, sin importar mayúsculas)
             if (!string.IsNullOrWhiteSpace(categoria) &&
@@ -68,7 +71,7 @@ public class ProductService : IProductService
         string categoria = request.Categoria.Trim();
 
         // PRD-003: no puede haber dos productos con el mismo nombre en la misma categoría
-        foreach (var existente in _repository.ObtenerTodos())
+        foreach (Product existente in _repository.ObtenerTodos())
         {
             if (string.Equals(existente.Nombre, nombre, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(existente.Categoria, categoria, StringComparison.OrdinalIgnoreCase))
@@ -80,7 +83,7 @@ public class ProductService : IProductService
             }
         }
 
-        var producto = new Product
+        Product producto = new Product
         {
             Id = Guid.NewGuid(),
             Nombre = nombre,
@@ -149,6 +152,25 @@ public class ProductService : IProductService
     }
 
     /// <summary>
+    /// Crea el cliente HTTP para Orders.API con su URL y un timeout de 5 segundos.
+    /// La URL se lee de appsettings.json ("Servicios:OrdersApi");
+    /// si no está configurada, se usa el puerto 5004 de la tabla de puertos.
+    /// </summary>
+    private HttpClient CrearClienteOrders()
+    {
+        string? urlOrdersApi = _configuration["Servicios:OrdersApi"];
+        if (string.IsNullOrWhiteSpace(urlOrdersApi))
+        {
+            urlOrdersApi = "http://localhost:5004";
+        }
+
+        HttpClient client = _httpClientFactory.CreateClient("OrdersApi");
+        client.BaseAddress = new Uri(urlOrdersApi);
+        client.Timeout = TimeSpan.FromSeconds(5);
+        return client;
+    }
+
+    /// <summary>
     /// Pregunta a Orders.API (GET /api/orders) si alguna orden activa usa el producto.
     /// Si Orders.API no responde (por ejemplo, porque todavía no está levantado),
     /// se registra un Warning y se permite eliminar.
@@ -157,14 +179,19 @@ public class ProductService : IProductService
     {
         try
         {
-            HttpClient client = _httpClientFactory.CreateClient("OrdersApi");
-            var request = new HttpRequestMessage(HttpMethod.Get, "/api/orders");
+            HttpClient client = CrearClienteOrders();
+            HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, "/api/orders");
 
-            // Propagamos el Correlation ID a Orders.API (sección 5.5 de la consigna)
-            string? correlationId = _httpContextAccessor.HttpContext?.Items["CorrelationId"] as string;
-            if (correlationId != null)
+            // Propagamos el Correlation ID a Orders.API (sección 5.5 de la consigna).
+            // Lo guardó el CorrelationIdMiddleware al inicio del request.
+            HttpContext? httpContext = _httpContextAccessor.HttpContext;
+            if (httpContext != null)
             {
-                request.Headers.Add("X-Correlation-Id", correlationId);
+                string? correlationId = httpContext.Items["CorrelationId"] as string;
+                if (correlationId != null)
+                {
+                    request.Headers.Add("X-Correlation-Id", correlationId);
+                }
             }
 
             HttpResponseMessage response = await client.SendAsync(request);
@@ -182,7 +209,7 @@ public class ProductService : IProductService
                 return false;
             }
 
-            foreach (var orden in ordenes)
+            foreach (OrderResumen orden in ordenes)
             {
                 bool estaActiva = orden.Estado == "Pendiente" || orden.Estado == "Confirmada";
                 if (!estaActiva)
@@ -190,7 +217,7 @@ public class ProductService : IProductService
                     continue;
                 }
 
-                foreach (var item in orden.Items)
+                foreach (OrderItemResumen item in orden.Items)
                 {
                     if (item.ProductoId == productoId)
                     {
