@@ -1,46 +1,77 @@
+using Dapper;
+using Microsoft.Data.Sqlite;
 using Notifications.API.Models;
 
 namespace Notifications.API.Data;
 
 /// <summary>
-/// Guarda las notificaciones en una lista en memoria.
-/// PROVISORIO: la consigna dice que la persistencia la da la cátedra como librería.
-/// Cuando la tengamos, se cambia solo esta clase y el resto del código queda igual.
+/// Guarda las notificaciones en la base SQLite (tabla Notifications) usando Dapper.
+/// Cada método abre su propia conexión y la cierra al terminar (el "using").
+/// La tabla la crea DatabaseInitializer al levantar el servicio.
+/// (Mismo esquema que ProductRepository en Products.API.)
 /// </summary>
 public class NotificationRepository
 {
-    private readonly List<Notification> _notificaciones = new List<Notification>();
+    private readonly string _connectionString;
 
-    public NotificationRepository()
+    public NotificationRepository(IConfiguration configuration)
     {
-        // Una notificación de ejemplo para María (el usuario de ejemplo de Users.API),
-        // así el GET responde algo desde Swagger sin cargar nada antes.
-        _notificaciones.Add(new Notification
+        // Se lee de appsettings.json ("ConnectionStrings:DefaultConnection").
+        string? connectionString = configuration.GetConnectionString("DefaultConnection");
+        if (string.IsNullOrWhiteSpace(connectionString))
         {
-            Id = Guid.Parse("11112222-3333-4444-5555-666677778888"),
-            UsuarioId = Guid.Parse("a1b2c3d4-0000-0000-0000-111122223333"),
-            Mensaje = "Su orden fue confirmada.",
-            Tipo = "Email",
-            Estado = "Enviada",
-            FechaEnvio = DateTime.UtcNow
-        });
+            connectionString = "Data Source=notifications.db";
+        }
+        _connectionString = connectionString;
     }
 
+    /// <summary>
+    /// Devuelve las notificaciones de un usuario, de la más vieja a la más nueva.
+    /// </summary>
     public List<Notification> ObtenerPorUsuario(Guid usuarioId)
     {
-        List<Notification> resultado = new List<Notification>();
-        foreach (Notification notificacion in _notificaciones)
+        string sql = @"SELECT Id, UsuarioId, Mensaje, Tipo, Estado, FechaEnvio
+                       FROM Notifications
+                       WHERE UsuarioId = @UsuarioId
+                       ORDER BY FechaEnvio";
+
+        DynamicParameters parametros = new DynamicParameters();
+        parametros.Add("UsuarioId", usuarioId);
+
+        using (SqliteConnection conexion = new SqliteConnection(_connectionString))
         {
-            if (notificacion.UsuarioId == usuarioId)
-            {
-                resultado.Add(notificacion);
-            }
+            IEnumerable<Notification> filas = conexion.Query<Notification>(sql, parametros);
+            List<Notification> notificaciones = new List<Notification>(filas);
+            return notificaciones;
         }
-        return resultado;
     }
 
+    /// <summary>
+    /// Devuelve cuántas notificaciones hay guardadas (lo usa DatabaseInitializer).
+    /// </summary>
+    public int Contar()
+    {
+        string sql = "SELECT COUNT(*) FROM Notifications";
+
+        using (SqliteConnection conexion = new SqliteConnection(_connectionString))
+        {
+            int cantidad = conexion.ExecuteScalar<int>(sql);
+            return cantidad;
+        }
+    }
+
+    /// <summary>
+    /// Inserta una notificación nueva.
+    /// Cada @Propiedad del SQL toma el valor de la propiedad con el mismo nombre.
+    /// </summary>
     public void Agregar(Notification notificacion)
     {
-        _notificaciones.Add(notificacion);
+        string sql = @"INSERT INTO Notifications (Id, UsuarioId, Mensaje, Tipo, Estado, FechaEnvio)
+                       VALUES (@Id, @UsuarioId, @Mensaje, @Tipo, @Estado, @FechaEnvio)";
+
+        using (SqliteConnection conexion = new SqliteConnection(_connectionString))
+        {
+            conexion.Execute(sql, notificacion);
+        }
     }
 }

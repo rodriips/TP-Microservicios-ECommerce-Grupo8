@@ -1,3 +1,4 @@
+using Dapper;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
 using Notifications.API.Common;
@@ -43,10 +44,12 @@ try
 
     // ============================================================
     // 3. INYECCIÓN DE DEPENDENCIAS
-    //    NotificationRepository es Singleton porque guarda la lista en
-    //    memoria (cuando la cátedra dé su librería, se reemplaza ahí).
+    //    NotificationRepository guarda las notificaciones en SQLite (ver Data/).
+    //    Es Singleton porque no guarda nada en memoria: cada método
+    //    abre su propia conexión a la base.
     // ============================================================
     builder.Services.AddSingleton<NotificationRepository>();
+    builder.Services.AddSingleton<DatabaseInitializer>();
     builder.Services.AddScoped<INotificationService, NotificationService>();
     builder.Services.AddHttpContextAccessor();
 
@@ -66,8 +69,11 @@ try
     // ============================================================
     // 5. HEALTH CHECKS
     //    "self" solo confirma que el servicio está levantado (Common/SelfHealthCheck.cs).
+    //    "sqlite" verifica que la base responda (Common/SqliteHealthCheck.cs).
     // ============================================================
-    builder.Services.AddHealthChecks().AddCheck<SelfHealthCheck>("self");
+    builder.Services.AddHealthChecks()
+        .AddCheck<SelfHealthCheck>("self")
+        .AddCheck<SqliteHealthCheck>("sqlite");
 
     // ============================================================
     // 6. SWAGGER con los comentarios XML de controllers y DTOs
@@ -79,7 +85,21 @@ try
     WebApplication app = builder.Build();
 
     // ============================================================
-    // 7. PIPELINE (el orden importa)
+    // 7. BASE DE DATOS SQLite
+    //    - Le decimos a Dapper cómo guardar y leer Guid y fechas
+    //      (SQLite no tiene esos tipos, se guardan como texto).
+    //    - Creamos la tabla y la notificación de ejemplo si no existen.
+    // ============================================================
+    SqlMapper.RemoveTypeMap(typeof(Guid));
+    SqlMapper.AddTypeHandler(new GuidTypeHandler());
+    SqlMapper.RemoveTypeMap(typeof(DateTime));
+    SqlMapper.AddTypeHandler(new FechaTypeHandler());
+
+    DatabaseInitializer inicializador = app.Services.GetRequiredService<DatabaseInitializer>();
+    inicializador.Inicializar();
+
+    // ============================================================
+    // 8. PIPELINE (el orden importa)
     // ============================================================
     app.UseMiddleware<CorrelationIdMiddleware>(); // primero: así todos los logs tienen el Correlation ID
     app.UseSerilogRequestLogging();               // loguea el fin de cada request con su duración
