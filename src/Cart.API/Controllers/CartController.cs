@@ -3,6 +3,7 @@ using Cart.API.DTOs;
 using Cart.API.Exceptions;
 using Cart.API.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace Cart.API.Controllers;
 
@@ -142,10 +143,10 @@ public class CartController : ControllerBase
             return;
         }
 
-        var errores = new List<string>();
-        foreach (var campo in ModelState.Values)
+        List<string> errores = new List<string>();
+        foreach (ModelStateEntry campo in ModelState.Values)
         {
-            foreach (var error in campo.Errors)
+            foreach (ModelError error in campo.Errors)
             {
                 errores.Add(error.ErrorMessage);
             }

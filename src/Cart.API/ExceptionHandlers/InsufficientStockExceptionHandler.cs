@@ -30,7 +30,7 @@ public class InsufficientStockExceptionHandler : IExceptionHandler
         _logger.LogWarning("Stock insuficiente: {ErrorCode} - {ErrorMessage}",
             insufficientStockException.ErrorCode, insufficientStockException.Message);
 
-        var errorResponse = new ErrorResponse
+        ErrorResponse errorResponse = new ErrorResponse
         {
             Type = "https://tools.ietf.org/html/rfc4918#section-11.2",
             Title = "Unprocessable Entity",
