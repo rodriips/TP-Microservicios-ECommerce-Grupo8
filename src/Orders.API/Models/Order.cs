@@ -12,7 +12,7 @@ public class Order
     public Guid UsuarioId { get; set; }
 
     /// <summary>Lista de productos incluidos en la orden.</summary>
-    public List<OrderItem> Items { get; set; } = new();
+    public List<OrderItem> Items { get; set; } = new List<OrderItem>();
 
     /// <summary>Calculado automáticamente al crear la orden: suma de Cantidad x PrecioUnitario de cada item.</summary>
     public decimal Total { get; set; }

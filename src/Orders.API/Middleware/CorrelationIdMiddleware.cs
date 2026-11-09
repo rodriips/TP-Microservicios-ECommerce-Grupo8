@@ -20,7 +20,7 @@ public class CorrelationIdMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        var correlationId = context.Request.Headers[NombreHeader].ToString();
+        string correlationId = context.Request.Headers[NombreHeader].ToString();
 
         if (string.IsNullOrWhiteSpace(correlationId))
         {
@@ -31,13 +31,9 @@ public class CorrelationIdMiddleware
 
         // Se agrega en OnStarting (no directo) porque ASP.NET limpia los headers
         // antes de invocar a los IExceptionHandler cuando hay un error.
-        context.Response.OnStarting(() =>
-        {
-            context.Response.Headers[NombreHeader] = correlationId;
-            return Task.CompletedTask;
-        });
+        context.Response.OnStarting(AgregarHeader, context);
 
-        var endpoint = $"{context.Request.Method} {context.Request.Path}";
+        string endpoint = $"{context.Request.Method} {context.Request.Path}";
 
         using (LogContext.PushProperty("CorrelationId", correlationId))
         using (LogContext.PushProperty("Endpoint", endpoint))
@@ -45,5 +41,19 @@ public class CorrelationIdMiddleware
             _logger.LogInformation("Inicio request {Endpoint}", endpoint);
             await _next(context);
         }
+    }
+
+    // Se ejecuta justo antes de enviar la respuesta: pone el X-Correlation-Id en los headers.
+    private static Task AgregarHeader(object estado)
+    {
+        HttpContext context = (HttpContext)estado;
+        string? correlationId = context.Items["CorrelationId"] as string;
+
+        if (correlationId != null)
+        {
+            context.Response.Headers[NombreHeader] = correlationId;
+        }
+
+        return Task.CompletedTask;
     }
 }

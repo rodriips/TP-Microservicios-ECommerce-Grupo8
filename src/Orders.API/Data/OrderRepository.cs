@@ -8,23 +8,29 @@ namespace Orders.API.Data;
 /// </summary>
 public class OrderRepository
 {
-    private readonly List<Order> _ordenes = new();
+    // Lista donde se guardan las órdenes mientras la aplicación está encendida
+    private readonly List<Order> _ordenes = new List<Order>();
 
+    // Devuelve todas las órdenes guardadas
     public List<Order> ObtenerTodos()
     {
         return _ordenes;
     }
 
+    // Busca una orden por Id; devuelve null si no existe
     public Order? ObtenerPorId(Guid id)
     {
-        foreach (var orden in _ordenes)
+        foreach (Order orden in _ordenes)
         {
             if (orden.Id == id)
+            {
                 return orden;
+            }
         }
         return null;
     }
 
+    // Agrega una orden nueva a la lista
     public void Agregar(Order orden)
     {
         _ordenes.Add(orden);

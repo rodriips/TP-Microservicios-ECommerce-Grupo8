@@ -24,11 +24,11 @@ public class GlobalExceptionHandler : IExceptionHandler
     {
         _logger.LogError(exception, "[{ErrorCode}] Error no controlado", ErrorCodes.ORD_007);
 
-        var detail = _env.IsDevelopment()
+        string detail = _env.IsDevelopment()
             ? exception.Message
             : "Ocurrió un error inesperado al procesar la solicitud.";
 
-        var error = new ErrorResponse
+        ErrorResponse error = new ErrorResponse
         {
             Type = "https://tools.ietf.org/html/rfc7231#section-6.6.1",
             Title = "Internal Server Error",

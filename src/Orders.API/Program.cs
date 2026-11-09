@@ -1,7 +1,5 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Microsoft.OpenApi.Models;
 using Orders.API.Common;
 using Orders.API.Data;
 using Orders.API.ExceptionHandlers;
@@ -25,35 +23,23 @@ try
 {
     Log.Information("Iniciando Orders.API...");
 
-    var builder = WebApplication.CreateBuilder(args);
+    WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
     builder.Host.UseSerilog();
 
     // Controllers + validación manual (ValidarDatos arma ORD-002 en vez de dejar que
     // [ApiController] devuelva un 400 automático sin nuestro formato de error).
     builder.Services.AddControllers();
-    builder.Services.Configure<ApiBehaviorOptions>(options =>
-    {
-        options.SuppressModelStateInvalidFilter = true;
-    });
+    builder.Services.Configure<ApiBehaviorOptions>(Configuracion.ConfigurarValidacion);
 
     builder.Services.AddSingleton<OrderRepository>();
     builder.Services.AddScoped<IOrderService, OrderService>();
     builder.Services.AddHttpContextAccessor();
 
-    // Clientes HTTP hacia los otros microservicios. Las URLs se leen de
-    // appsettings.json (sección "Servicios"); si no están, usan estos puertos por defecto.
-    builder.Services.AddHttpClient("UsersApi", client =>
-    {
-        client.BaseAddress = new Uri(builder.Configuration["Servicios:UsersApi"] ?? "http://localhost:5002");
-        client.Timeout = TimeSpan.FromSeconds(5);
-    });
-
-    builder.Services.AddHttpClient("ProductsApi", client =>
-    {
-        client.BaseAddress = new Uri(builder.Configuration["Servicios:ProductsApi"] ?? "http://localhost:5001");
-        client.Timeout = TimeSpan.FromSeconds(5);
-    });
+    // Clientes HTTP hacia los otros microservicios. La URL y el timeout
+    // se configuran en OrderService, al crear cada cliente.
+    builder.Services.AddHttpClient("UsersApi");
+    builder.Services.AddHttpClient("ProductsApi");
 
     // IExceptionHandler, del más específico al más genérico. GlobalExceptionHandler
     // va siempre último: es la red de seguridad.
@@ -65,37 +51,19 @@ try
     builder.Services.AddProblemDetails();
 
     builder.Services.AddHealthChecks()
-        .AddCheck("self", () => HealthCheckResult.Healthy("Orders.API está funcionando."));
+        .AddCheck<SelfHealthCheck>("self");
 
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen(options =>
-    {
-        options.SwaggerDoc("v1", new OpenApiInfo
-        {
-            Title = "Orders.API - ECommerce Microservices",
-            Version = "v1",
-            Description = "Gestión de órdenes de compra. Valida usuario y stock contra Users.API y Products.API."
-        });
+    builder.Services.AddSwaggerGen(Configuracion.ConfigurarSwagger);
 
-        var xmlFile = Path.Combine(AppContext.BaseDirectory, "Orders.API.xml");
-        if (File.Exists(xmlFile))
-        {
-            options.IncludeXmlComments(xmlFile);
-        }
-    });
-
-    var app = builder.Build();
+    WebApplication app = builder.Build();
 
     app.UseMiddleware<CorrelationIdMiddleware>();
     app.UseSerilogRequestLogging();
     app.UseExceptionHandler();
 
-    app.UseSwagger(options => options.SerializeAsV2 = true);
-    app.UseSwaggerUI(options =>
-    {
-        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Orders.API v1");
-        options.RoutePrefix = "swagger";
-    });
+    app.UseSwagger(Configuracion.ConfigurarSwaggerJson);
+    app.UseSwaggerUI(Configuracion.ConfigurarSwaggerUI);
 
     app.MapControllers();
 
@@ -111,7 +79,7 @@ try
 
     app.MapHealthChecks("/health/live", new HealthCheckOptions
     {
-        Predicate = check => false,
+        Predicate = Configuracion.NingunCheck,
         ResponseWriter = HealthCheckResponseWriter.EscribirRespuesta
     });
 
