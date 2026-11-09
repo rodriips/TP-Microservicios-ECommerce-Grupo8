@@ -1,81 +1,116 @@
+using Dapper;
+using Microsoft.Data.Sqlite;
 using Products.API.Models;
 
 namespace Products.API.Data;
 
 /// <summary>
-/// Guarda los productos en una lista en memoria.
-/// PROVISORIO: la consigna dice que la persistencia la da la cátedra como librería.
-/// Cuando la tengamos, se cambia solo esta clase y el resto del código queda igual.
+/// Guarda los productos en la base SQLite (tabla Products) usando Dapper.
+/// Cada método abre su propia conexión y la cierra al terminar (el "using").
+/// La tabla la crea DatabaseInitializer al levantar el servicio.
+///
+/// Con Dapper escribimos el SQL a mano:
+/// - Query  → para SELECT; devuelve los resultados ya convertidos a Product.
+/// - Execute → para INSERT, UPDATE y DELETE.
+/// - Los @Nombre del SQL se reemplazan por los valores de los parámetros.
 /// </summary>
 public class ProductRepository
 {
-    private readonly List<Product> _productos = new List<Product>();
+    private readonly string _connectionString;
 
-    public ProductRepository()
+    public ProductRepository(IConfiguration configuration)
     {
-        // Productos de ejemplo para probar desde Swagger sin cargar nada.
-        // El primero usa el mismo Id que los ejemplos de la consigna.
-        _productos.Add(new Product
+        // Se lee de appsettings.json ("ConnectionStrings:DefaultConnection").
+        string? connectionString = configuration.GetConnectionString("DefaultConnection");
+        if (string.IsNullOrWhiteSpace(connectionString))
         {
-            Id = Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6"),
-            Nombre = "Notebook Dell XPS 15",
-            Descripcion = "Laptop 15 pulgadas, 32GB RAM",
-            Precio = 1500.00m,
-            Stock = 10,
-            Categoria = "Electrónica",
-            FechaCreacion = DateTime.UtcNow
-        });
-        _productos.Add(new Product
-        {
-            Id = Guid.NewGuid(),
-            Nombre = "Zapatillas Running",
-            Descripcion = "Zapatillas livianas para correr",
-            Precio = 120.00m,
-            Stock = 25,
-            Categoria = "Deportes",
-            FechaCreacion = DateTime.UtcNow
-        });
-        _productos.Add(new Product
-        {
-            Id = Guid.NewGuid(),
-            Nombre = "Lámpara de pie",
-            Descripcion = "Lámpara LED de 1,60 m",
-            Precio = 85.50m,
-            Stock = 0,
-            Categoria = "Hogar y Deco",
-            FechaCreacion = DateTime.UtcNow
-        });
+            connectionString = "Data Source=products.db";
+        }
+        _connectionString = connectionString;
     }
 
     /// <summary>
-    /// Devuelve una COPIA de la lista, para que nadie de afuera pueda
-    /// agregar o quitar productos sin pasar por este repositorio.
+    /// Devuelve todos los productos, del más viejo al más nuevo.
     /// </summary>
     public List<Product> ObtenerTodos()
     {
-        List<Product> copia = new List<Product>(_productos);
-        return copia;
+        string sql = @"SELECT Id, Nombre, Descripcion, Precio, Stock, Categoria, FechaCreacion
+                       FROM Products
+                       ORDER BY FechaCreacion";
+
+        using (SqliteConnection conexion = new SqliteConnection(_connectionString))
+        {
+            IEnumerable<Product> filas = conexion.Query<Product>(sql);
+            List<Product> productos = new List<Product>(filas);
+            return productos;
+        }
     }
 
+    /// <summary>
+    /// Devuelve el producto con ese Id, o null si no existe.
+    /// </summary>
     public Product? ObtenerPorId(Guid id)
     {
-        foreach (Product producto in _productos)
+        string sql = @"SELECT Id, Nombre, Descripcion, Precio, Stock, Categoria, FechaCreacion
+                       FROM Products
+                       WHERE Id = @Id";
+
+        DynamicParameters parametros = new DynamicParameters();
+        parametros.Add("Id", id);
+
+        using (SqliteConnection conexion = new SqliteConnection(_connectionString))
         {
-            if (producto.Id == id)
-            {
-                return producto;
-            }
+            Product? producto = conexion.QuerySingleOrDefault<Product>(sql, parametros);
+            return producto;
         }
-        return null;
     }
 
+    /// <summary>
+    /// Inserta un producto nuevo.
+    /// Le pasamos el objeto producto a Dapper: cada @Propiedad del SQL
+    /// toma el valor de la propiedad con el mismo nombre (@Nombre ← producto.Nombre).
+    /// </summary>
     public void Agregar(Product producto)
     {
-        _productos.Add(producto);
+        string sql = @"INSERT INTO Products (Id, Nombre, Descripcion, Precio, Stock, Categoria, FechaCreacion)
+                       VALUES (@Id, @Nombre, @Descripcion, @Precio, @Stock, @Categoria, @FechaCreacion)";
+
+        using (SqliteConnection conexion = new SqliteConnection(_connectionString))
+        {
+            conexion.Execute(sql, producto);
+        }
     }
 
-    public void Eliminar(Product producto)
+    /// <summary>
+    /// Guarda los cambios de un producto que ya existe.
+    /// Id y FechaCreacion no se modifican.
+    /// </summary>
+    public void Actualizar(Product producto)
     {
-        _productos.Remove(producto);
+        string sql = @"UPDATE Products
+                       SET Nombre = @Nombre,
+                           Descripcion = @Descripcion,
+                           Precio = @Precio,
+                           Stock = @Stock,
+                           Categoria = @Categoria
+                       WHERE Id = @Id";
+
+        using (SqliteConnection conexion = new SqliteConnection(_connectionString))
+        {
+            conexion.Execute(sql, producto);
+        }
+    }
+
+    public void Eliminar(Guid id)
+    {
+        string sql = "DELETE FROM Products WHERE Id = @Id";
+
+        DynamicParameters parametros = new DynamicParameters();
+        parametros.Add("Id", id);
+
+        using (SqliteConnection conexion = new SqliteConnection(_connectionString))
+        {
+            conexion.Execute(sql, parametros);
+        }
     }
 }

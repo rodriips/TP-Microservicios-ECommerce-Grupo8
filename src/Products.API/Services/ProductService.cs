@@ -111,6 +111,7 @@ public class ProductService : IProductService
         producto.Stock = request.Stock;
         producto.Categoria = request.Categoria.Trim();
 
+        _repository.Actualizar(producto);
         _logger.LogInformation("Producto actualizado: {ProductoId}", producto.Id);
         return ConvertirAResponse(producto);
     }
@@ -129,7 +130,7 @@ public class ProductService : IProductService
                 "No se puede eliminar el recurso.");
         }
 
-        _repository.Eliminar(producto);
+        _repository.Eliminar(producto.Id);
         _logger.LogInformation("Producto eliminado: {ProductoId}", id);
     }
 
