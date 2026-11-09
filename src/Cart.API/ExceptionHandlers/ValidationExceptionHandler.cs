@@ -30,7 +30,7 @@ public class ValidationExceptionHandler : IExceptionHandler
         _logger.LogWarning("Error de validación: {ErrorCode} - {ErrorMessage}",
             validationException.ErrorCode, validationException.Message);
 
-        var errorResponse = new ErrorResponse
+        ErrorResponse errorResponse = new ErrorResponse
         {
             Type = "https://tools.ietf.org/html/rfc7231#section-6.5.1",
             Title = "Bad Request",

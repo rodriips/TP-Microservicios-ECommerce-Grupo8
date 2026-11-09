@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Users.API.Common;
 using Users.API.DTOs;
 using Users.API.Exceptions;
@@ -117,10 +118,10 @@ public class UsersController : ControllerBase
             return;
         }
 
-        var errores = new List<string>();
-        foreach (var campo in ModelState.Values)
+        List<string> errores = new List<string>();
+        foreach (ModelStateEntry campo in ModelState.Values)
         {
-            foreach (var error in campo.Errors)
+            foreach (ModelError error in campo.Errors)
             {
                 errores.Add(error.ErrorMessage);
             }

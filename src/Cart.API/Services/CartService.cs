@@ -11,6 +11,8 @@ namespace Cart.API.Services;
 /// Implementación del servicio del carrito de compras.
 /// Valida contra Products.API (HttpClient) la existencia y el stock del producto
 /// antes de agregar o actualizar ítems.
+/// Los carritos viven en SQLite: cada vez que se modifica uno, hay que llamar
+/// al repositorio para guardarlo (cambiar el objeto en memoria no alcanza).
 /// </summary>
 public class CartService : ICartService
 {
@@ -48,7 +50,7 @@ public class CartService : ICartService
 
     public CartResponse ObtenerCarrito(Guid usuarioId)
     {
-        var carrito = _cartRepository.ObtenerPorUsuario(usuarioId);
+        ShoppingCart? carrito = _cartRepository.ObtenerPorUsuario(usuarioId);
 
         // CRT-001: el usuario no tiene carrito
         if (carrito == null)
@@ -66,6 +68,13 @@ public class CartService : ICartService
 
     public async Task<CartResponse> AgregarItemAsync(Guid usuarioId, CartItemRequest request)
     {
+        // CRT-004: si el body no trae productoId, llega como Guid vacío
+        if (request.ProductoId == Guid.Empty)
+        {
+            throw new ValidationException(ErrorCodes.CRT_004,
+                "El productoId es obligatorio.");
+        }
+
         if (request.Cantidad <= 0)
         {
             throw new ValidationException(ErrorCodes.CRT_004,
@@ -73,7 +82,7 @@ public class CartService : ICartService
         }
 
         // Validar contra Products.API
-        var producto = await ObtenerProductoOExceptionAsync(request.ProductoId);
+        ProductoDto producto = await ObtenerProductoOExceptionAsync(request.ProductoId);
 
         if (producto.Stock < request.Cantidad)
         {
@@ -82,18 +91,19 @@ public class CartService : ICartService
                 $"Stock disponible: {producto.Stock}, solicitado: {request.Cantidad}.");
         }
 
-        var carrito = _cartRepository.ObtenerPorUsuario(usuarioId);
+        ShoppingCart? carrito = _cartRepository.ObtenerPorUsuario(usuarioId);
 
         if (carrito == null)
         {
-            // El usuario no tiene carrito aún: lo creamos
-            carrito = new ShoppingCart { UsuarioId = usuarioId };
-            _cartRepository.Agregar(carrito);
+            // El usuario no tiene carrito aún: creamos el objeto, pero todavía NO lo guardamos.
+            // Se guarda al final, así si falla alguna validación no queda un carrito vacío en la base.
+            carrito = new ShoppingCart();
+            carrito.UsuarioId = usuarioId;
         }
 
         // Si el producto ya está en el carrito, sumamos la cantidad
         CartItem? itemExistente = null;
-        foreach (var item in carrito.Items)
+        foreach (CartItem item in carrito.Items)
         {
             if (item.ProductoId == request.ProductoId)
             {
@@ -115,14 +125,16 @@ public class CartService : ICartService
         }
         else
         {
-            carrito.Items.Add(new CartItem
-            {
-                ProductoId = request.ProductoId,
-                Cantidad = request.Cantidad
-            });
+            CartItem itemNuevo = new CartItem();
+            itemNuevo.ProductoId = request.ProductoId;
+            itemNuevo.Cantidad = request.Cantidad;
+            carrito.Items.Add(itemNuevo);
         }
 
         carrito.FechaActualizacion = DateTime.UtcNow;
+
+        // Recién ahora, con todas las validaciones pasadas, guardamos en la base
+        _cartRepository.Guardar(carrito);
 
         _logger.LogInformation("Ítem {ProductoId} agregado al carrito del usuario {UsuarioId}",
             request.ProductoId, usuarioId);
@@ -143,23 +155,14 @@ public class CartService : ICartService
                 "La cantidad debe ser mayor a 0.");
         }
 
-        var carrito = _cartRepository.ObtenerPorUsuario(usuarioId);
+        ShoppingCart? carrito = _cartRepository.ObtenerPorUsuario(usuarioId);
         if (carrito == null)
         {
             throw new NotFoundException(ErrorCodes.CRT_001,
                 $"El usuario '{usuarioId}' no tiene un carrito activo.");
         }
 
-        CartItem? item = null;
-        foreach (var i in carrito.Items)
-        {
-            if (i.ProductoId == productoId)
-            {
-                item = i;
-                break;
-            }
-        }
-
+        CartItem? item = BuscarItem(carrito, productoId);
         if (item == null)
         {
             throw new NotFoundException(ErrorCodes.CRT_002,
@@ -167,7 +170,7 @@ public class CartService : ICartService
         }
 
         // Verificar stock actual
-        var producto = await ObtenerProductoOExceptionAsync(productoId);
+        ProductoDto producto = await ObtenerProductoOExceptionAsync(productoId);
         if (producto.Stock < request.Cantidad)
         {
             throw new InsufficientStockException(ErrorCodes.CRT_003,
@@ -177,6 +180,9 @@ public class CartService : ICartService
 
         item.Cantidad = request.Cantidad;
         carrito.FechaActualizacion = DateTime.UtcNow;
+
+        // Guardamos el cambio en la base
+        _cartRepository.Guardar(carrito);
 
         _logger.LogInformation("Cantidad del producto {ProductoId} actualizada a {Cantidad} en el carrito de {UsuarioId}",
             productoId, request.Cantidad, usuarioId);
@@ -191,23 +197,14 @@ public class CartService : ICartService
 
     public void EliminarItem(Guid usuarioId, Guid productoId)
     {
-        var carrito = _cartRepository.ObtenerPorUsuario(usuarioId);
+        ShoppingCart? carrito = _cartRepository.ObtenerPorUsuario(usuarioId);
         if (carrito == null)
         {
             throw new NotFoundException(ErrorCodes.CRT_001,
                 $"El usuario '{usuarioId}' no tiene un carrito activo.");
         }
 
-        CartItem? item = null;
-        foreach (var i in carrito.Items)
-        {
-            if (i.ProductoId == productoId)
-            {
-                item = i;
-                break;
-            }
-        }
-
+        CartItem? item = BuscarItem(carrito, productoId);
         if (item == null)
         {
             throw new NotFoundException(ErrorCodes.CRT_002,
@@ -216,6 +213,9 @@ public class CartService : ICartService
 
         carrito.Items.Remove(item);
         carrito.FechaActualizacion = DateTime.UtcNow;
+
+        // Guardamos el carrito sin ese producto
+        _cartRepository.Guardar(carrito);
 
         _logger.LogInformation("Producto {ProductoId} eliminado del carrito de {UsuarioId}", productoId, usuarioId);
     }
@@ -226,14 +226,14 @@ public class CartService : ICartService
 
     public void VaciarCarrito(Guid usuarioId)
     {
-        var carrito = _cartRepository.ObtenerPorUsuario(usuarioId);
+        ShoppingCart? carrito = _cartRepository.ObtenerPorUsuario(usuarioId);
         if (carrito == null)
         {
             throw new NotFoundException(ErrorCodes.CRT_001,
                 $"El usuario '{usuarioId}' no tiene un carrito activo.");
         }
 
-        _cartRepository.Eliminar(carrito);
+        _cartRepository.Eliminar(usuarioId);
         _logger.LogInformation("Carrito del usuario {UsuarioId} vaciado.", usuarioId);
     }
 
@@ -242,12 +242,27 @@ public class CartService : ICartService
     // ---------------------------------------------------------------
 
     /// <summary>
+    /// Busca un producto dentro del carrito. Devuelve null si no está.
+    /// </summary>
+    private static CartItem? BuscarItem(ShoppingCart carrito, Guid productoId)
+    {
+        foreach (CartItem item in carrito.Items)
+        {
+            if (item.ProductoId == productoId)
+            {
+                return item;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Pasa el carrito del modelo (ShoppingCart) al DTO que devuelve la API (CartResponse).
     /// </summary>
     private static CartResponse ConvertirAResponse(ShoppingCart carrito)
     {
-        var items = new List<CartItemResponse>();
-        foreach (var item in carrito.Items)
+        List<CartItemResponse> items = new List<CartItemResponse>();
+        foreach (CartItem item in carrito.Items)
         {
             items.Add(new CartItemResponse
             {
@@ -271,7 +286,7 @@ public class CartService : ICartService
     {
         // Armamos el request manualmente para poder propagar el X-Correlation-Id
         // al log de Products.API y mantener la trazabilidad distribuida (sección 5.5).
-        var request = new HttpRequestMessage(HttpMethod.Get, $"api/products/{productoId}");
+        HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, $"api/products/{productoId}");
 
         // El Correlation ID lo guardó el CorrelationIdMiddleware al inicio del request
         HttpContext? httpContext = _httpContextAccessor.HttpContext;
@@ -284,7 +299,7 @@ public class CartService : ICartService
             }
         }
 
-        var response = await _productsClient.SendAsync(request);
+        HttpResponseMessage response = await _productsClient.SendAsync(request);
 
         // Si Products.API dice 404, el producto no existe (CRT-002)
         if (response.StatusCode == HttpStatusCode.NotFound)
@@ -300,7 +315,7 @@ public class CartService : ICartService
         }
 
         // Leemos el JSON de la respuesta y lo convertimos a ProductoDto
-        var producto = await response.Content.ReadFromJsonAsync<ProductoDto>();
+        ProductoDto? producto = await response.Content.ReadFromJsonAsync<ProductoDto>();
 
         if (producto == null)
         {

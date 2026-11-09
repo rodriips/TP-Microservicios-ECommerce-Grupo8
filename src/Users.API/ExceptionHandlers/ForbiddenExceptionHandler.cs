@@ -31,7 +31,7 @@ public class ForbiddenExceptionHandler : IExceptionHandler
 
         _logger.LogWarning("[{ErrorCode}] {Mensaje}", ex.ErrorCode, ex.Message);
 
-        var errorResponse = new ErrorResponse
+        ErrorResponse errorResponse = new ErrorResponse
         {
             Type = "https://tools.ietf.org/html/rfc7231#section-6.5.3",
             Title = "Forbidden",

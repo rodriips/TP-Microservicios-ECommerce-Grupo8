@@ -1,91 +1,142 @@
+using Dapper;
+using Microsoft.Data.Sqlite;
 using Users.API.Models;
 
 namespace Users.API.Data;
 
 /// <summary>
-/// Repositorio en memoria de usuarios.
-/// Incluye usuarios precargados para pruebas y demostraciones en vivo.
+/// Guarda los usuarios en la base SQLite (tabla Users) usando Dapper.
+/// Cada método abre su propia conexión y la cierra al terminar (el "using").
+/// La tabla la crea DatabaseInitializer al levantar el servicio.
+/// (Mismo esquema que ProductRepository en Products.API.)
+///
+/// Todos los SELECT traen TODAS las columnas: si faltara PasswordHash, Activo,
+/// IntentosFallidos o BloqueadoPorFraude, el login y el bloqueo no funcionarían.
 /// </summary>
 public class UserRepository
 {
-    private readonly List<User> _usuarios = new List<User>();
+    private readonly string _connectionString;
 
-    public UserRepository()
+    public UserRepository(IConfiguration configuration)
     {
-        // 1. Usuario normal activo de ejemplo (con ID fijo para pruebas)
-        _usuarios.Add(new User
+        // Se lee de appsettings.json ("ConnectionStrings:DefaultConnection").
+        string? connectionString = configuration.GetConnectionString("DefaultConnection");
+        if (string.IsNullOrWhiteSpace(connectionString))
         {
-            Id = Guid.Parse("a1b2c3d4-0000-0000-0000-111122223333"),
-            Nombre = "María",
-            Apellido = "González",
-            Email = "maria@email.com",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("MiPassword123!"),
-            FechaRegistro = DateTime.UtcNow,
-            Activo = true,
-            IntentosFallidos = 0,
-            BloqueadoPorFraude = false
-        });
-
-        // 2. Usuario bloqueado por fraude para probar USR-005 en la demo
-        _usuarios.Add(new User
-        {
-            Id = Guid.Parse("b2c3d4e5-0000-0000-0000-222233334444"),
-            Nombre = "Carlos",
-            Apellido = "Fraude",
-            Email = "fraude@email.com",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("MiPassword123!"),
-            FechaRegistro = DateTime.UtcNow,
-            Activo = false,
-            IntentosFallidos = 0,
-            BloqueadoPorFraude = true
-        });
-
-        // 3. Usuario ya bloqueado por intentos fallidos para probar USR-004 directo
-        _usuarios.Add(new User
-        {
-            Id = Guid.Parse("c3d4e5f6-0000-0000-0000-333344445555"),
-            Nombre = "Pedro",
-            Apellido = "Bloqueado",
-            Email = "bloqueado@email.com",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("MiPassword123!"),
-            FechaRegistro = DateTime.UtcNow,
-            Activo = false,
-            IntentosFallidos = 3,
-            BloqueadoPorFraude = false
-        });
+            connectionString = "Data Source=users.db";
+        }
+        _connectionString = connectionString;
     }
 
+    /// <summary>
+    /// Devuelve todos los usuarios, del más viejo al más nuevo.
+    /// </summary>
     public List<User> ObtenerTodos()
     {
-        return _usuarios;
+        string sql = @"SELECT Id, Nombre, Apellido, Email, PasswordHash, FechaRegistro,
+                              Activo, IntentosFallidos, BloqueadoPorFraude
+                       FROM Users
+                       ORDER BY FechaRegistro";
+
+        using (SqliteConnection conexion = new SqliteConnection(_connectionString))
+        {
+            IEnumerable<User> filas = conexion.Query<User>(sql);
+            List<User> usuarios = new List<User>(filas);
+            return usuarios;
+        }
     }
 
+    /// <summary>
+    /// Devuelve el usuario con ese Id, o null si no existe.
+    /// </summary>
     public User? ObtenerPorId(Guid id)
     {
-        foreach (var usuario in _usuarios)
+        string sql = @"SELECT Id, Nombre, Apellido, Email, PasswordHash, FechaRegistro,
+                              Activo, IntentosFallidos, BloqueadoPorFraude
+                       FROM Users
+                       WHERE Id = @Id";
+
+        DynamicParameters parametros = new DynamicParameters();
+        parametros.Add("Id", id);
+
+        using (SqliteConnection conexion = new SqliteConnection(_connectionString))
         {
-            if (usuario.Id == id)
-            {
-                return usuario;
-            }
+            User? usuario = conexion.QuerySingleOrDefault<User>(sql, parametros);
+            return usuario;
         }
-        return null;
     }
 
+    /// <summary>
+    /// Devuelve el usuario con ese email (sin importar mayúsculas), o null si no existe.
+    /// </summary>
     public User? ObtenerPorEmail(string email)
     {
-        foreach (var usuario in _usuarios)
+        string sql = @"SELECT Id, Nombre, Apellido, Email, PasswordHash, FechaRegistro,
+                              Activo, IntentosFallidos, BloqueadoPorFraude
+                       FROM Users
+                       WHERE LOWER(Email) = LOWER(@Email)";
+
+        DynamicParameters parametros = new DynamicParameters();
+        parametros.Add("Email", email.Trim());
+
+        using (SqliteConnection conexion = new SqliteConnection(_connectionString))
         {
-            if (string.Equals(usuario.Email, email.Trim(), StringComparison.OrdinalIgnoreCase))
-            {
-                return usuario;
-            }
+            User? usuario = conexion.QuerySingleOrDefault<User>(sql, parametros);
+            return usuario;
         }
-        return null;
     }
 
+    /// <summary>
+    /// Devuelve cuántos usuarios hay guardados (lo usa DatabaseInitializer).
+    /// </summary>
+    public int Contar()
+    {
+        string sql = "SELECT COUNT(*) FROM Users";
+
+        using (SqliteConnection conexion = new SqliteConnection(_connectionString))
+        {
+            int cantidad = conexion.ExecuteScalar<int>(sql);
+            return cantidad;
+        }
+    }
+
+    /// <summary>
+    /// Inserta un usuario nuevo.
+    /// Le pasamos el objeto usuario a Dapper: cada @Propiedad del SQL
+    /// toma el valor de la propiedad con el mismo nombre (@Nombre ← usuario.Nombre).
+    /// </summary>
     public void Agregar(User usuario)
     {
-        _usuarios.Add(usuario);
+        string sql = @"INSERT INTO Users (Id, Nombre, Apellido, Email, PasswordHash, FechaRegistro,
+                                          Activo, IntentosFallidos, BloqueadoPorFraude)
+                       VALUES (@Id, @Nombre, @Apellido, @Email, @PasswordHash, @FechaRegistro,
+                               @Activo, @IntentosFallidos, @BloqueadoPorFraude)";
+
+        using (SqliteConnection conexion = new SqliteConnection(_connectionString))
+        {
+            conexion.Execute(sql, usuario);
+        }
+    }
+
+    /// <summary>
+    /// Guarda los cambios de un usuario que ya existe (por ejemplo los intentos fallidos del login).
+    /// Id y FechaRegistro no se modifican.
+    /// </summary>
+    public void Actualizar(User usuario)
+    {
+        string sql = @"UPDATE Users
+                       SET Nombre = @Nombre,
+                           Apellido = @Apellido,
+                           Email = @Email,
+                           PasswordHash = @PasswordHash,
+                           Activo = @Activo,
+                           IntentosFallidos = @IntentosFallidos,
+                           BloqueadoPorFraude = @BloqueadoPorFraude
+                       WHERE Id = @Id";
+
+        using (SqliteConnection conexion = new SqliteConnection(_connectionString))
+        {
+            conexion.Execute(sql, usuario);
+        }
     }
 }

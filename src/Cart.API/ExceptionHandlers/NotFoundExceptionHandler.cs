@@ -30,7 +30,7 @@ public class NotFoundExceptionHandler : IExceptionHandler
         _logger.LogWarning("Recurso no encontrado: {ErrorCode} - {ErrorMessage}",
             notFoundException.ErrorCode, notFoundException.Message);
 
-        var errorResponse = new ErrorResponse
+        ErrorResponse errorResponse = new ErrorResponse
         {
             Type = "https://tools.ietf.org/html/rfc7231#section-6.5.4",
             Title = "Not Found",
