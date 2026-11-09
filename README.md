@@ -474,7 +474,7 @@ src/{Servicio}.API/
 ├── Models/                 # Entidades del dominio (Product, User, Order, etc.)
 ├── DTOs/                   # Request, Response y ErrorResponse estructurado
 ├── Services/               # Lógica de negocio (IProductService, IOrderService, etc.)
-├── Data/                   # Repositorios (SQLite con Dapper o en memoria, según el servicio) y creación de la base
+├── Data/                   # Repositorios con SQLite y Dapper, y creación de la base
 ├── Exceptions/             # Excepciones tipadas de negocio (NotFound, Conflict, etc.)
 ├── ExceptionHandlers/      # Handlers individuales implementando IExceptionHandler
 ├── Middleware/             # Middleware de trazabilidad de CorrelationId
