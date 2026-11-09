@@ -10,6 +10,7 @@ public class UpdateItemQuantityRequest
     /// <summary>
     /// Nueva cantidad del producto (debe ser mayor a 0).
     /// </summary>
+    /// <example>5</example>
     [Required(ErrorMessage = "La cantidad es obligatoria.")]
     [Range(1, int.MaxValue, ErrorMessage = "La cantidad debe ser mayor a 0.")]
     public int Cantidad { get; set; }

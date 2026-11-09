@@ -1,5 +1,4 @@
 using System.Net;
-using System.Text.Json;
 using Cart.API.Common;
 using Cart.API.Data;
 using Cart.API.DTOs;
@@ -19,47 +18,53 @@ public class CartService : ICartService
     private readonly HttpClient _productsClient;
     private readonly ILogger<CartService> _logger;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IConfiguration _configuration;
 
     public CartService(CartRepository cartRepository, IHttpClientFactory httpClientFactory, ILogger<CartService> logger,
-        IHttpContextAccessor httpContextAccessor)
+        IHttpContextAccessor httpContextAccessor, IConfiguration configuration)
     {
         _cartRepository = cartRepository;
-        _productsClient = httpClientFactory.CreateClient("ProductsAPI");
         _logger = logger;
         _httpContextAccessor = httpContextAccessor;
+        _configuration = configuration;
+
+        // Cliente HTTP para llamar a Products.API: URL base desde appsettings.json y timeout de 5 segundos
+        string? urlProductos = _configuration["Servicios:ProductsApi"];
+        if (urlProductos == null)
+        {
+            urlProductos = "http://localhost:5001";
+        }
+
+        HttpClient client = httpClientFactory.CreateClient("ProductsAPI");
+        client.BaseAddress = new Uri(urlProductos);
+        client.Timeout = TimeSpan.FromSeconds(5);
+        client.DefaultRequestHeaders.Add("Accept", "application/json");
+        _productsClient = client;
     }
 
     // ---------------------------------------------------------------
     // GET
     // ---------------------------------------------------------------
 
-    public List<CartItemResponse> ObtenerCarrito(Guid usuarioId)
+    public CartResponse ObtenerCarrito(Guid usuarioId)
     {
         var carrito = _cartRepository.ObtenerPorUsuario(usuarioId);
 
+        // CRT-001: el usuario no tiene carrito
         if (carrito == null)
         {
             throw new NotFoundException(ErrorCodes.CRT_001,
                 $"El usuario '{usuarioId}' no tiene un carrito activo.");
         }
 
-        var response = new List<CartItemResponse>();
-        foreach (var item in carrito.Items)
-        {
-            response.Add(new CartItemResponse
-            {
-                ProductoId = item.ProductoId,
-                Cantidad = item.Cantidad
-            });
-        }
-        return response;
+        return ConvertirAResponse(carrito);
     }
 
     // ---------------------------------------------------------------
     // POST – agregar ítem
     // ---------------------------------------------------------------
 
-    public async Task AgregarItemAsync(Guid usuarioId, CartItemRequest request)
+    public async Task<CartResponse> AgregarItemAsync(Guid usuarioId, CartItemRequest request)
     {
         if (request.Cantidad <= 0)
         {
@@ -121,13 +126,16 @@ public class CartService : ICartService
 
         _logger.LogInformation("Ítem {ProductoId} agregado al carrito del usuario {UsuarioId}",
             request.ProductoId, usuarioId);
+
+        // Devolvemos el carrito completo, ya actualizado
+        return ConvertirAResponse(carrito);
     }
 
     // ---------------------------------------------------------------
     // PUT – actualizar cantidad
     // ---------------------------------------------------------------
 
-    public async Task ActualizarItemAsync(Guid usuarioId, Guid productoId, UpdateItemQuantityRequest request)
+    public async Task<CartResponse> ActualizarItemAsync(Guid usuarioId, Guid productoId, UpdateItemQuantityRequest request)
     {
         if (request.Cantidad <= 0)
         {
@@ -172,6 +180,9 @@ public class CartService : ICartService
 
         _logger.LogInformation("Cantidad del producto {ProductoId} actualizada a {Cantidad} en el carrito de {UsuarioId}",
             productoId, request.Cantidad, usuarioId);
+
+        // Devolvemos el carrito completo, ya actualizado
+        return ConvertirAResponse(carrito);
     }
 
     // ---------------------------------------------------------------
@@ -231,33 +242,65 @@ public class CartService : ICartService
     // ---------------------------------------------------------------
 
     /// <summary>
+    /// Pasa el carrito del modelo (ShoppingCart) al DTO que devuelve la API (CartResponse).
+    /// </summary>
+    private static CartResponse ConvertirAResponse(ShoppingCart carrito)
+    {
+        var items = new List<CartItemResponse>();
+        foreach (var item in carrito.Items)
+        {
+            items.Add(new CartItemResponse
+            {
+                ProductoId = item.ProductoId,
+                Cantidad = item.Cantidad
+            });
+        }
+
+        return new CartResponse
+        {
+            UsuarioId = carrito.UsuarioId,
+            Items = items,
+            FechaActualizacion = carrito.FechaActualizacion
+        };
+    }
+
+    /// <summary>
     /// Consulta Products.API. Si el producto no existe lanza CRT-002.
     /// </summary>
     private async Task<ProductoDto> ObtenerProductoOExceptionAsync(Guid productoId)
     {
         // Armamos el request manualmente para poder propagar el X-Correlation-Id
         // al log de Products.API y mantener la trazabilidad distribuida (sección 5.5).
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"api/products/{productoId}");
+        var request = new HttpRequestMessage(HttpMethod.Get, $"api/products/{productoId}");
 
-        var correlationId = _httpContextAccessor.HttpContext?.Items["CorrelationId"]?.ToString();
-        if (!string.IsNullOrWhiteSpace(correlationId))
+        // El Correlation ID lo guardó el CorrelationIdMiddleware al inicio del request
+        HttpContext? httpContext = _httpContextAccessor.HttpContext;
+        if (httpContext != null)
         {
-            request.Headers.Add("X-Correlation-Id", correlationId);
+            string? correlationId = httpContext.Items["CorrelationId"] as string;
+            if (correlationId != null)
+            {
+                request.Headers.Add("X-Correlation-Id", correlationId);
+            }
         }
 
         var response = await _productsClient.SendAsync(request);
 
+        // Si Products.API dice 404, el producto no existe (CRT-002)
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
             throw new NotFoundException(ErrorCodes.CRT_002,
                 $"El producto '{productoId}' no existe en el catálogo.");
         }
 
-        response.EnsureSuccessStatusCode();
+        // Cualquier otro error de Products.API es inesperado (lo atrapa el GlobalExceptionHandler)
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new Exception($"Products.API respondió {(int)response.StatusCode} al consultar el producto {productoId}.");
+        }
 
-        var content = await response.Content.ReadAsStringAsync();
-        var producto = JsonSerializer.Deserialize<ProductoDto>(content,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        // Leemos el JSON de la respuesta y lo convertimos a ProductoDto
+        var producto = await response.Content.ReadFromJsonAsync<ProductoDto>();
 
         if (producto == null)
         {

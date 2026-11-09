@@ -1,7 +1,5 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Microsoft.OpenApi.Models;
 using Serilog;
 using Serilog.Events;
 using Serilog.Formatting.Json;
@@ -40,21 +38,14 @@ try
     //    capturarlo en el controller y lanzar ValidationException (CRT-004).
     // ============================================================
     builder.Services.AddControllers();
-    builder.Services.Configure<ApiBehaviorOptions>(options =>
-    {
-        options.SuppressModelStateInvalidFilter = true;
-    });
+    builder.Services.Configure<ApiBehaviorOptions>(Configuracion.ConfigurarValidacion);
 
     // ============================================================
     // 3. HTTPCLIENT para llamar a Products.API
-    //    La URL base se lee de appsettings.json ("Servicios:ProductsApi").
+    //    Solo se registra el nombre. La URL base (appsettings.json, "Servicios:ProductsApi")
+    //    y el timeout se configuran en CartService, al crear el cliente.
     // ============================================================
-    string productsApiUrl = builder.Configuration["Servicios:ProductsApi"] ?? "http://localhost:5001";
-    builder.Services.AddHttpClient("ProductsAPI", client =>
-    {
-        client.BaseAddress = new Uri(productsApiUrl);
-        client.DefaultRequestHeaders.Add("Accept", "application/json");
-    });
+    builder.Services.AddHttpClient("ProductsAPI");
 
     // ============================================================
     // 4. INYECCIÓN DE DEPENDENCIAS
@@ -78,27 +69,13 @@ try
     // 6. HEALTH CHECKS
     // ============================================================
     builder.Services.AddHealthChecks()
-        .AddCheck("self", () => HealthCheckResult.Healthy("Cart.API está funcionando."));
+        .AddCheck<SelfHealthCheck>("self");
 
     // ============================================================
     // 7. SWAGGER con comentarios XML
     // ============================================================
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen(options =>
-    {
-        options.SwaggerDoc("v1", new OpenApiInfo
-        {
-            Title = "Cart.API - ECommerce Microservices",
-            Version = "v1",
-            Description = "Microservicio de carrito de compras. Valida stock en tiempo real consultando Products.API."
-        });
-
-        string rutaXml = Path.Combine(AppContext.BaseDirectory, "Cart.API.xml");
-        if (File.Exists(rutaXml))
-        {
-            options.IncludeXmlComments(rutaXml);
-        }
-    });
+    builder.Services.AddSwaggerGen(Configuracion.ConfigurarSwagger);
 
     var app = builder.Build();
 
@@ -109,31 +86,24 @@ try
     app.UseSerilogRequestLogging();
     app.UseExceptionHandler();
 
-    app.UseSwagger(options =>
-    {
-        options.SerializeAsV2 = true;
-    });
-    app.UseSwaggerUI(options =>
-    {
-        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Cart.API v1");
-        options.RoutePrefix = "swagger";
-    });
+    app.UseSwagger(Configuracion.ConfigurarSwaggerJson);
+    app.UseSwaggerUI(Configuracion.ConfigurarSwaggerUI);
 
     app.MapControllers();
 
     // Health Checks estructurados en JSON
     app.MapHealthChecks("/health", new HealthCheckOptions
     {
-        ResponseWriter = HealthCheckResponseWriter.WriteResponse
+        ResponseWriter = HealthCheckResponseWriter.EscribirRespuesta
     });
     app.MapHealthChecks("/health/ready", new HealthCheckOptions
     {
-        ResponseWriter = HealthCheckResponseWriter.WriteResponse
+        ResponseWriter = HealthCheckResponseWriter.EscribirRespuesta
     });
     app.MapHealthChecks("/health/live", new HealthCheckOptions
     {
-        Predicate = check => false,
-        ResponseWriter = HealthCheckResponseWriter.WriteResponse
+        Predicate = Configuracion.NingunCheck,
+        ResponseWriter = HealthCheckResponseWriter.EscribirRespuesta
     });
 
     app.Run();

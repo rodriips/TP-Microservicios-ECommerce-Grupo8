@@ -8,7 +8,8 @@ public class ConflictException : Exception
     public string ErrorCode { get; }
     public string Detail { get; }
 
-    public ConflictException(string errorCode, string message, string detail = "Ya existe un recurso con esos datos.") : base(message)
+    // El detalle se pasa siempre desde quien lanza la excepción (sin valor por defecto)
+    public ConflictException(string errorCode, string message, string detail) : base(message)
     {
         ErrorCode = errorCode;
         Detail = detail;

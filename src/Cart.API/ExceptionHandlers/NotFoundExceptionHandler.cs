@@ -24,7 +24,8 @@ public class NotFoundExceptionHandler : IExceptionHandler
             return false;
         }
 
-        string correlationId = httpContext.Items["CorrelationId"] as string ?? Guid.NewGuid().ToString();
+        // Id del request: lo guardó el CorrelationIdMiddleware al empezar
+        string? correlationId = httpContext.Items["CorrelationId"] as string;
 
         _logger.LogWarning("Recurso no encontrado: {ErrorCode} - {ErrorMessage}",
             notFoundException.ErrorCode, notFoundException.Message);

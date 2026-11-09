@@ -26,8 +26,8 @@ public class ValidationExceptionHandler : IExceptionHandler
             return false;
         }
 
-        string? correlationId = httpContext.Items["CorrelationId"] as string
-                                ?? httpContext.Request.Headers["X-Correlation-Id"].FirstOrDefault();
+        // Id del request: lo guardó el CorrelationIdMiddleware al empezar
+        string? correlationId = httpContext.Items["CorrelationId"] as string;
 
         _logger.LogWarning("[{ErrorCode}] {Mensaje}", ex.ErrorCode, ex.Message);
 

@@ -24,7 +24,8 @@ public class InsufficientStockExceptionHandler : IExceptionHandler
             return false;
         }
 
-        string correlationId = httpContext.Items["CorrelationId"] as string ?? Guid.NewGuid().ToString();
+        // Id del request: lo guardó el CorrelationIdMiddleware al empezar
+        string? correlationId = httpContext.Items["CorrelationId"] as string;
 
         _logger.LogWarning("Stock insuficiente: {ErrorCode} - {ErrorMessage}",
             insufficientStockException.ErrorCode, insufficientStockException.Message);
