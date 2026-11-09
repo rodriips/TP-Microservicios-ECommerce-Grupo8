@@ -523,10 +523,26 @@ Cada microservicio tiene **su propia base de datos**, que no se comparte con los
 - **Guid y fechas como texto:** SQLite no tiene esos tipos, así que dos clases (`GuidTypeHandler` y `FechaTypeHandler`) le enseñan a Dapper a guardarlos como texto y a convertirlos de vuelta al leer.
 - **Los archivos `.db` no se suben al repositorio** (están en `.gitignore`): cada uno genera el suyo al ejecutar el servicio.
 
-### Tablas de `Orders.API`
+### Tablas de cada servicio
 Las columnas se llaman igual que las propiedades de los modelos.
+
+**`Products.API`** (`products.db`)
+
+| Tabla | Columnas |
+| :--- | :--- |
+| `Products` | `Id`, `Nombre`, `Descripcion`, `Precio`, `Stock`, `Categoria`, `FechaCreacion` |
+
+**`Notifications.API`** (`notifications.db`)
+
+| Tabla | Columnas |
+| :--- | :--- |
+| `Notifications` | `Id`, `UsuarioId`, `Mensaje`, `Tipo`, `Estado`, `FechaEnvio` |
+
+**`Orders.API`** (`orders.db`)
 
 | Tabla | Columnas |
 | :--- | :--- |
 | `Orders` | `Id`, `UsuarioId`, `Total`, `Estado`, `FechaCreacion`, `FechaActualizacion` |
 | `OrderItems` | `Id`, `OrderId`, `ProductoId`, `Cantidad`, `PrecioUnitario` |
+
+Las tablas de `Users.API` y `Cart.API` se agregan cuando se migren a SQLite.
