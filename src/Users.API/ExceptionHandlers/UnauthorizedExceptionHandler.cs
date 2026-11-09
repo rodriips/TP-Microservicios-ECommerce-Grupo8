@@ -31,7 +31,7 @@ public class UnauthorizedExceptionHandler : IExceptionHandler
 
         _logger.LogWarning("[{ErrorCode}] {Mensaje}", ex.ErrorCode, ex.Message);
 
-        var errorResponse = new ErrorResponse
+        ErrorResponse errorResponse = new ErrorResponse
         {
             Type = "https://tools.ietf.org/html/rfc7235#section-3.1",
             Title = "Unauthorized",

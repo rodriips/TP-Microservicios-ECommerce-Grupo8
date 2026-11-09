@@ -34,7 +34,7 @@ public class UserService : IUserService
                 "Ya existe un recurso con esos datos.");
         }
 
-        var usuario = new User
+        User usuario = new User
         {
             Id = Guid.NewGuid(),
             Nombre = request.Nombre.Trim(),
@@ -98,6 +98,13 @@ public class UserService : IUserService
             {
                 usuario.Activo = false;
                 _logger.LogWarning("Usuario {UserId} ha sido bloqueado tras alcanzar 3 intentos fallidos", usuario.Id);
+            }
+
+            // Guardamos el intento fallido (y el bloqueo si llegó a 3) en la base
+            _repository.Actualizar(usuario);
+
+            if (usuario.IntentosFallidos >= 3)
+            {
                 throw new ForbiddenException(ErrorCodes.USR_004, "Su cuenta fue bloqueada por superar el máximo de intentos fallidos. Contacte a soporte.");
             }
 
@@ -106,6 +113,7 @@ public class UserService : IUserService
 
         // Login exitoso: se resetea el contador de intentos fallidos
         usuario.IntentosFallidos = 0;
+        _repository.Actualizar(usuario);
         _logger.LogInformation("Login exitoso para usuario {UserId} ({Email})", usuario.Id, usuario.Email);
 
         return new LoginResponse
@@ -139,8 +147,9 @@ public class UserService : IUserService
 
     public List<UserResponse> ObtenerTodos()
     {
-        var resultado = new List<UserResponse>();
-        foreach (var usuario in _repository.ObtenerTodos())
+        List<UserResponse> resultado = new List<UserResponse>();
+        List<User> usuarios = _repository.ObtenerTodos();
+        foreach (User usuario in usuarios)
         {
             resultado.Add(new UserResponse
             {
