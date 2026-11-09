@@ -120,9 +120,9 @@ graph TD
 ### 📋 Funcionalidades y Endpoints de `Cart.API`
 
 #### 1. Ver el carrito (`GET /api/cart/{userId}`)
-- **Qué hace:** Devuelve la lista de productos y cantidades que el usuario tiene en su carrito.
+- **Qué hace:** Devuelve el carrito del usuario: su `usuarioId`, la lista de `items` (`productoId` y `cantidad`) y la `fechaActualizacion`.
 - **Códigos de respuesta:**
-  - `200 OK`: Lista de ítems del carrito.
+  - `200 OK`: Carrito del usuario con sus ítems.
   - `404 Not Found`: El usuario no tiene carrito activo (`CRT-001`).
 
 #### 2. Agregar producto al carrito (`POST /api/cart/{userId}/items`)
@@ -131,7 +131,7 @@ graph TD
   - Verifica que el producto exista (`CRT-002`).
   - Verifica que haya stock suficiente (`CRT-003`).
 - **Códigos de respuesta:**
-  - `204 No Content`: Ítem agregado correctamente.
+  - `200 OK`: Ítem agregado correctamente (devuelve el carrito actualizado).
   - `400 Bad Request`: Cantidad inválida (`CRT-004`).
   - `404 Not Found`: El producto no existe en el catálogo (`CRT-002`).
   - `422 Unprocessable Entity`: Stock insuficiente (`CRT-003`).
@@ -139,7 +139,7 @@ graph TD
 #### 3. Actualizar cantidad (`PUT /api/cart/{userId}/items/{productId}`)
 - **Qué hace:** Cambia la cantidad de un producto ya existente en el carrito, re-validando stock en `Products.API`.
 - **Códigos de respuesta:**
-  - `204 No Content`: Actualizado correctamente.
+  - `200 OK`: Actualizado correctamente (devuelve el carrito actualizado).
   - `404 Not Found`: El carrito o el ítem no existen (`CRT-001` / `CRT-002`).
   - `422 Unprocessable Entity`: Stock insuficiente (`CRT-003`).
 
@@ -334,8 +334,8 @@ Viene precargada una notificación para **María** (`a1b2c3d4-0000-0000-0000-111
 
 ---
 
-#### 14. Ítem agregado al carrito con éxito (`204 No Content`)
-![Ítem agregado al carrito](docs/Screenshots/cart/cart-post-204-success-add-item.png)
+#### 14. Ítem agregado al carrito con éxito (`200 OK`)
+![Ítem agregado al carrito](docs/Screenshots/cart/cart-post-200-success-add-item.png)
 
 ---
 
