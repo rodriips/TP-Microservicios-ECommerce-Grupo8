@@ -513,8 +513,8 @@ Cada microservicio tiene **su propia base de datos**, que no se comparte con los
 | `Products.API` | SQLite con Dapper | `products.db` |
 | `Notifications.API` | SQLite con Dapper | `notifications.db` |
 | `Orders.API` | SQLite con Dapper | `orders.db` |
-| `Users.API` | En memoria (en migración a SQLite) | — |
-| `Cart.API` | En memoria (en migración a SQLite) | — |
+| `Users.API` | SQLite con Dapper | `users.db` |
+| `Cart.API` | SQLite con Dapper | `cart.db` |
 
 ### Cómo funciona (en los servicios con SQLite)
 - **Dónde está la base:** se configura en `appsettings.json`, en `ConnectionStrings:DefaultConnection` (por ejemplo `"Data Source=orders.db"`). Para usar otra base SQLite alcanza con cambiar esa línea, sin tocar código. Si la línea no está, se usa el archivo por defecto del servicio.
@@ -545,4 +545,15 @@ Las columnas se llaman igual que las propiedades de los modelos.
 | `Orders` | `Id`, `UsuarioId`, `Total`, `Estado`, `FechaCreacion`, `FechaActualizacion` |
 | `OrderItems` | `Id`, `OrderId`, `ProductoId`, `Cantidad`, `PrecioUnitario` |
 
-Las tablas de `Users.API` y `Cart.API` se agregan cuando se migren a SQLite.
+**`Users.API`** (`users.db`)
+
+| Tabla | Columnas |
+| :--- | :--- |
+| `Users` | `Id`, `Nombre`, `Apellido`, `Email`, `PasswordHash`, `FechaRegistro`, `Activo`, `IntentosFallidos`, `BloqueadoPorFraude` |
+
+**`Cart.API`** (`cart.db`)
+
+| Tabla | Columnas |
+| :--- | :--- |
+| `Carts` | `UsuarioId`, `FechaActualizacion` |
+| `CartItems` | `UsuarioId`, `ProductoId`, `Cantidad` |
