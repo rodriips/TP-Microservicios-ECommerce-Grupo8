@@ -14,7 +14,7 @@ Desarrollo de una plataforma de comercio electrónico modular basada en microser
 
 ## 🏗️ Arquitectura General del Sistema
 
-El sistema está dividido en **5 microservicios independientes**, cada uno con su propia persistencia en memoria, puerto de red y responsabilidad única:
+El sistema está dividido en **5 microservicios independientes**, cada uno con su propia persistencia, puerto de red y responsabilidad única:
 
 ```mermaid
 graph TD
@@ -474,7 +474,7 @@ src/{Servicio}.API/
 ├── Models/                 # Entidades del dominio (Product, User, Order, etc.)
 ├── DTOs/                   # Request, Response y ErrorResponse estructurado
 ├── Services/               # Lógica de negocio (IProductService, IOrderService, etc.)
-├── Data/                   # Repositorios en memoria con datos precargados
+├── Data/                   # Repositorios (SQLite con Dapper o en memoria, según el servicio) y creación de la base
 ├── Exceptions/             # Excepciones tipadas de negocio (NotFound, Conflict, etc.)
 ├── ExceptionHandlers/      # Handlers individuales implementando IExceptionHandler
 ├── Middleware/             # Middleware de trazabilidad de CorrelationId
@@ -493,16 +493,67 @@ Cada request entra al sistema con un encabezado `X-Correlation-Id`. Si no viene,
 ### Logs estructurados con Serilog
 Cada microservicio escribe logs en dos destinos simultáneos:
 - **Consola** — formato legible para el desarrollador durante el desarrollo.
-- **Archivo JSON** (`logs/log-YYYYMMDD.json`) — un archivo por día, formato estructurado apto para sistemas de análisis de logs.
+- **Archivo JSON** (logs/*.json) — un archivo por día, formato estructurado apto para sistemas de análisis de logs.
 
 ### Health Checks
 Cada servicio expone tres endpoints de salud:
 - `GET /health` — estado general (agrega todas las comprobaciones).
-- `GET /health/ready` — indica si el servicio está listo para recibir tráfico.
+- `GET /health/ready` — indica si el servicio está listo para recibir tráfico. En los servicios con SQLite también verifica que la base responda (check sqlite).
 - `GET /health/live` — indica si el proceso está vivo.
 
 ### Manejo de errores con `IExceptionHandler`
 Todos los errores de negocio se lanzan como excepciones tipadas (`NotFoundException`, `ValidationException`, `BusinessRuleException`, `UnprocessableEntityException`) y son capturadas por handlers individuales que implementan `IExceptionHandler`. La respuesta siempre es un `ProblemDetails` enriquecido con los campos `errorCode` (p. ej. `ORD-001`) y `errorMessage`.
 
-### Persistencia en memoria
-Todos los microservicios usan repositorios en memoria (`List<T>` / `Dictionary<K,V>`). La cátedra proveerá una librería de persistencia real más adelante; cuando llegue, solo será necesario reemplazar los repositorios — el resto de la arquitectura (servicios, controladores, excepciones) no cambia.
+## 💾 Persistencia (SQLite + Dapper)
+
+Cada microservicio tiene **su propia base de datos**, que no se comparte con los demás.
+
+| Microservicio | Persistencia | Archivo de base |
+| :--- | :--- | :---: |
+| `Products.API` | SQLite con Dapper | `products.db` |
+| `Notifications.API` | SQLite con Dapper | `notifications.db` |
+| `Orders.API` | SQLite con Dapper | `orders.db` |
+| `Users.API` | SQLite con Dapper | `users.db` |
+| `Cart.API` | SQLite con Dapper | `cart.db` |
+
+### Cómo funciona (en los servicios con SQLite)
+- **Dónde está la base:** se configura en `appsettings.json`, en `ConnectionStrings:DefaultConnection` (por ejemplo `"Data Source=orders.db"`). Para usar otra base SQLite alcanza con cambiar esa línea, sin tocar código. Si la línea no está, se usa el archivo por defecto del servicio.
+- **Creación automática:** al arrancar, la clase `DatabaseInitializer` crea las tablas si todavía no existen. No hay que preparar nada a mano.
+- **Todo el SQL en un solo lugar:** el repositorio del servicio (por ejemplo `OrderRepository`) es el único que habla con la base. Los servicios y controladores no saben que existe SQLite.
+- **Guid y fechas como texto:** SQLite no tiene esos tipos, así que dos clases (`GuidTypeHandler` y `FechaTypeHandler`) le enseñan a Dapper a guardarlos como texto y a convertirlos de vuelta al leer.
+- **Los archivos `.db` no se suben al repositorio** (están en `.gitignore`): cada uno genera el suyo al ejecutar el servicio.
+
+### Tablas de cada servicio
+Las columnas se llaman igual que las propiedades de los modelos.
+
+**`Products.API`** (`products.db`)
+
+| Tabla | Columnas |
+| :--- | :--- |
+| `Products` | `Id`, `Nombre`, `Descripcion`, `Precio`, `Stock`, `Categoria`, `FechaCreacion` |
+
+**`Notifications.API`** (`notifications.db`)
+
+| Tabla | Columnas |
+| :--- | :--- |
+| `Notifications` | `Id`, `UsuarioId`, `Mensaje`, `Tipo`, `Estado`, `FechaEnvio` |
+
+**`Orders.API`** (`orders.db`)
+
+| Tabla | Columnas |
+| :--- | :--- |
+| `Orders` | `Id`, `UsuarioId`, `Total`, `Estado`, `FechaCreacion`, `FechaActualizacion` |
+| `OrderItems` | `Id`, `OrderId`, `ProductoId`, `Cantidad`, `PrecioUnitario` |
+
+**`Users.API`** (`users.db`)
+
+| Tabla | Columnas |
+| :--- | :--- |
+| `Users` | `Id`, `Nombre`, `Apellido`, `Email`, `PasswordHash`, `FechaRegistro`, `Activo`, `IntentosFallidos`, `BloqueadoPorFraude` |
+
+**`Cart.API`** (`cart.db`)
+
+| Tabla | Columnas |
+| :--- | :--- |
+| `Carts` | `UsuarioId`, `FechaActualizacion` |
+| `CartItems` | `UsuarioId`, `ProductoId`, `Cantidad` |
