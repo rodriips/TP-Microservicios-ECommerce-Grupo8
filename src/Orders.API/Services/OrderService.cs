@@ -144,6 +144,7 @@ public class OrderService : IOrderService
         DateTime ahora = DateTime.UtcNow;
         orden.Estado = nuevoEstado;
         orden.FechaActualizacion = ahora;
+        _repository.ActualizarEstado(orden);
 
         _logger.LogInformation("Orden {OrdenId} cambió a estado {Estado}", orden.Id, orden.Estado);
 

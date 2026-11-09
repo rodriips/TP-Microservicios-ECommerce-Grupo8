@@ -1,3 +1,4 @@
+using Dapper;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
 using Orders.API.Common;
@@ -33,6 +34,7 @@ try
     builder.Services.Configure<ApiBehaviorOptions>(Configuracion.ConfigurarValidacion);
 
     builder.Services.AddSingleton<OrderRepository>();
+    builder.Services.AddSingleton<DatabaseInitializer>();
     builder.Services.AddScoped<IOrderService, OrderService>();
     builder.Services.AddHttpContextAccessor();
 
@@ -51,12 +53,23 @@ try
     builder.Services.AddProblemDetails();
 
     builder.Services.AddHealthChecks()
-        .AddCheck<SelfHealthCheck>("self");
+        .AddCheck<SelfHealthCheck>("self")
+        .AddCheck<SqliteHealthCheck>("sqlite");
 
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(Configuracion.ConfigurarSwagger);
 
     WebApplication app = builder.Build();
+
+    // Base de datos SQLite: Dapper necesita saber cómo guardar Guid y fechas (como texto),
+    // y después se crean las tablas si todavía no existen.
+    SqlMapper.RemoveTypeMap(typeof(Guid));
+    SqlMapper.AddTypeHandler(new GuidTypeHandler());
+    SqlMapper.RemoveTypeMap(typeof(DateTime));
+    SqlMapper.AddTypeHandler(new FechaTypeHandler());
+
+    DatabaseInitializer inicializador = app.Services.GetRequiredService<DatabaseInitializer>();
+    inicializador.Inicializar();
 
     app.UseMiddleware<CorrelationIdMiddleware>();
     app.UseSerilogRequestLogging();
