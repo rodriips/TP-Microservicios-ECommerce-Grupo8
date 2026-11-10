@@ -1,6 +1,57 @@
-@Cart.API_HostAddress = http://localhost:5076
+@host = http://localhost:5003
 
-GET {{Cart.API_HostAddress}}/weatherforecast/
-Accept: application/json
+# Para agregar o actualizar ítems tiene que estar levantado Products.API (5001).
+# María: a1b2c3d4-0000-0000-0000-111122223333 · Notebook: 3fa85f64-5717-4562-b3fc-2c963f66afa6
 
-###
+### Ver el carrito de María (error CRT-001 si todavía no tiene)
+GET {{host}}/api/cart/a1b2c3d4-0000-0000-0000-111122223333
+
+### Agregar producto (éxito; si el carrito no existe, lo crea)
+POST {{host}}/api/cart/a1b2c3d4-0000-0000-0000-111122223333/items
+Content-Type: application/json
+
+{
+  "productoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "cantidad": 2
+}
+
+### Agregar producto (error CRT-002: no existe en el catálogo)
+POST {{host}}/api/cart/a1b2c3d4-0000-0000-0000-111122223333/items
+Content-Type: application/json
+
+{
+  "productoId": "11111111-1111-1111-1111-111111111111",
+  "cantidad": 1
+}
+
+### Agregar producto (error CRT-003: stock insuficiente)
+POST {{host}}/api/cart/a1b2c3d4-0000-0000-0000-111122223333/items
+Content-Type: application/json
+
+{
+  "productoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "cantidad": 500
+}
+
+### Agregar producto (error CRT-004: cantidad inválida)
+POST {{host}}/api/cart/a1b2c3d4-0000-0000-0000-111122223333/items
+Content-Type: application/json
+
+{
+  "productoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "cantidad": 0
+}
+
+### Actualizar cantidad (éxito)
+PUT {{host}}/api/cart/a1b2c3d4-0000-0000-0000-111122223333/items/3fa85f64-5717-4562-b3fc-2c963f66afa6
+Content-Type: application/json
+
+{
+  "cantidad": 4
+}
+
+### Quitar un producto del carrito
+DELETE {{host}}/api/cart/a1b2c3d4-0000-0000-0000-111122223333/items/3fa85f64-5717-4562-b3fc-2c963f66afa6
+
+### Vaciar el carrito completo
+DELETE {{host}}/api/cart/a1b2c3d4-0000-0000-0000-111122223333

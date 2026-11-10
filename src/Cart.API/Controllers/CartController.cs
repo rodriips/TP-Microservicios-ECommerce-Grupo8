@@ -37,6 +37,8 @@ public class CartController : ControllerBase
     [ProducesResponseType(typeof(CartResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [EjemploError(404, ErrorCodes.CRT_001, "El recurso solicitado no fue encontrado.", "El usuario 'a1b2c3d4-0000-0000-0000-111122223333' no tiene un carrito activo.")]
+    [EjemploError(500, ErrorCodes.CRT_005, "Ocurrió un error inesperado al procesar la solicitud.", "Error interno al procesar el carrito.")]
     public ActionResult<CartResponse> ObtenerCarrito(Guid userId)
     {
         CartResponse carrito = _cartService.ObtenerCarrito(userId);
@@ -63,6 +65,10 @@ public class CartController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status422UnprocessableEntity)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [EjemploError(400, ErrorCodes.CRT_004, "Los datos enviados son inválidos.", "La cantidad debe ser mayor a 0.")]
+    [EjemploError(404, ErrorCodes.CRT_002, "El recurso solicitado no fue encontrado.", "El producto '3fa85f64-5717-4562-b3fc-2c963f66afa6' no existe en el catálogo.")]
+    [EjemploError(422, ErrorCodes.CRT_003, "La solicitud no se pudo procesar debido a reglas de negocio de stock.", "Stock insuficiente para el producto '3fa85f64-5717-4562-b3fc-2c963f66afa6'. Stock disponible: 10, solicitado: 15.")]
+    [EjemploError(500, ErrorCodes.CRT_005, "Ocurrió un error inesperado al procesar la solicitud.", "Error interno al procesar el carrito.")]
     public async Task<ActionResult<CartResponse>> AgregarItem(Guid userId, [FromBody] CartItemRequest request)
     {
         ValidarDatos();
@@ -90,6 +96,11 @@ public class CartController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status422UnprocessableEntity)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [EjemploError(400, ErrorCodes.CRT_004, "Los datos enviados son inválidos.", "La cantidad debe ser mayor a 0.")]
+    [EjemploError(404, ErrorCodes.CRT_001, "El recurso solicitado no fue encontrado.", "El usuario 'a1b2c3d4-0000-0000-0000-111122223333' no tiene un carrito activo.")]
+    [EjemploError(404, ErrorCodes.CRT_002, "El recurso solicitado no fue encontrado.", "El producto '3fa85f64-5717-4562-b3fc-2c963f66afa6' no está en el carrito.")]
+    [EjemploError(422, ErrorCodes.CRT_003, "La solicitud no se pudo procesar debido a reglas de negocio de stock.", "Stock insuficiente para el producto '3fa85f64-5717-4562-b3fc-2c963f66afa6'. Stock disponible: 10, solicitado: 15.")]
+    [EjemploError(500, ErrorCodes.CRT_005, "Ocurrió un error inesperado al procesar la solicitud.", "Error interno al procesar el carrito.")]
     public async Task<ActionResult<CartResponse>> ActualizarItem(Guid userId, Guid productId, [FromBody] UpdateItemQuantityRequest request)
     {
         ValidarDatos();
@@ -109,6 +120,9 @@ public class CartController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [EjemploError(404, ErrorCodes.CRT_001, "El recurso solicitado no fue encontrado.", "El usuario 'a1b2c3d4-0000-0000-0000-111122223333' no tiene un carrito activo.")]
+    [EjemploError(404, ErrorCodes.CRT_002, "El recurso solicitado no fue encontrado.", "El producto '3fa85f64-5717-4562-b3fc-2c963f66afa6' no está en el carrito.")]
+    [EjemploError(500, ErrorCodes.CRT_005, "Ocurrió un error inesperado al procesar la solicitud.", "Error interno al procesar el carrito.")]
     public IActionResult EliminarItem(Guid userId, Guid productId)
     {
         _cartService.EliminarItem(userId, productId);
@@ -126,6 +140,8 @@ public class CartController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [EjemploError(404, ErrorCodes.CRT_001, "El recurso solicitado no fue encontrado.", "El usuario 'a1b2c3d4-0000-0000-0000-111122223333' no tiene un carrito activo.")]
+    [EjemploError(500, ErrorCodes.CRT_005, "Ocurrió un error inesperado al procesar la solicitud.", "Error interno al procesar el carrito.")]
     public IActionResult VaciarCarrito(Guid userId)
     {
         _cartService.VaciarCarrito(userId);

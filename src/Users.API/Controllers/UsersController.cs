@@ -42,6 +42,9 @@ public class UsersController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [EjemploError(400, ErrorCodes.USR_002, "Los datos del usuario son inválidos.", "El formato del email es inválido.")]
+    [EjemploError(409, ErrorCodes.USR_001, "Ya existe un recurso con esos datos.", "El email 'maria@email.com' ya está registrado.")]
+    [EjemploError(500, ErrorCodes.USR_006, "Ocurrió un error inesperado al procesar la solicitud.", "Error interno al procesar el usuario.")]
     public ActionResult<RegisterUserResponse> Register([FromBody] RegisterUserRequest request)
     {
         ValidarDatos();
@@ -69,6 +72,11 @@ public class UsersController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [EjemploError(400, ErrorCodes.USR_002, "Los datos del usuario son inválidos.", "El email es obligatorio.")]
+    [EjemploError(401, ErrorCodes.USR_003, "Las credenciales no son válidas.", "Credenciales incorrectas.")]
+    [EjemploError(403, ErrorCodes.USR_004, "El acceso está prohibido.", "Su cuenta fue bloqueada por superar el máximo de intentos fallidos. Contacte a soporte.")]
+    [EjemploError(403, ErrorCodes.USR_005, "El acceso está prohibido.", "Su cuenta fue suspendida por razones de seguridad. Contacte a soporte.")]
+    [EjemploError(500, ErrorCodes.USR_006, "Ocurrió un error inesperado al procesar la solicitud.", "Error interno al procesar el usuario.")]
     public ActionResult<LoginResponse> Login([FromBody] LoginRequest request)
     {
         ValidarDatos();
@@ -87,6 +95,8 @@ public class UsersController : ControllerBase
     [ProducesResponseType(typeof(UserResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [EjemploError(404, ErrorCodes.USR_007, "El recurso solicitado no fue encontrado.", "Usuario con ID 'a1b2c3d4-0000-0000-0000-111122223333' no encontrado.")]
+    [EjemploError(500, ErrorCodes.USR_006, "Ocurrió un error inesperado al procesar la solicitud.", "Error interno al procesar el usuario.")]
     public ActionResult<UserResponse> GetById([FromRoute] Guid id)
     {
         UserResponse usuario = _userService.ObtenerPorId(id);
@@ -101,6 +111,7 @@ public class UsersController : ControllerBase
     [HttpGet]
     [ProducesResponseType(typeof(List<UserResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [EjemploError(500, ErrorCodes.USR_006, "Ocurrió un error inesperado al procesar la solicitud.", "Error interno al procesar el usuario.")]
     public ActionResult<List<UserResponse>> GetAll()
     {
         List<UserResponse> usuarios = _userService.ObtenerTodos();

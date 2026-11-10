@@ -24,8 +24,8 @@ public class GlobalExceptionHandler : IExceptionHandler
         // Id del request: lo guardó el CorrelationIdMiddleware al empezar
         string? correlationId = httpContext.Items["CorrelationId"] as string;
 
-        _logger.LogError(exception, "Error no controlado procesando la solicitud en {Path}. CorrelationId: {CorrelationId}",
-            httpContext.Request.Path, correlationId);
+        _logger.LogError(exception, "[{ErrorCode}] Error no controlado procesando la solicitud en {Path}. CorrelationId: {CorrelationId}",
+            ErrorCodes.CRT_005, httpContext.Request.Path, correlationId);
 
         // Nivel de detalle según el entorno: en Development mostramos el mensaje
         // de la excepción para facilitar la depuración; en Production, un texto genérico.
