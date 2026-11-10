@@ -1,6 +1,82 @@
-@Orders.API_HostAddress = http://localhost:5185
+@host = http://localhost:5004
 
-GET {{Orders.API_HostAddress}}/weatherforecast/
-Accept: application/json
+# Para crear órdenes tienen que estar levantados Users.API (5002) y Products.API (5001).
+# María: a1b2c3d4-0000-0000-0000-111122223333 · Notebook: 3fa85f64-5717-4562-b3fc-2c963f66afa6
 
-###
+### Listar todas las órdenes
+GET {{host}}/api/orders
+
+### Listar las órdenes de María
+GET {{host}}/api/orders?usuarioId=a1b2c3d4-0000-0000-0000-111122223333
+
+### Crear (éxito)
+POST {{host}}/api/orders
+Content-Type: application/json
+
+{
+  "usuarioId": "a1b2c3d4-0000-0000-0000-111122223333",
+  "items": [
+    { "productoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "cantidad": 2 }
+  ]
+}
+
+### Crear (error ORD-002: lista de items vacía)
+POST {{host}}/api/orders
+Content-Type: application/json
+
+{
+  "usuarioId": "a1b2c3d4-0000-0000-0000-111122223333",
+  "items": []
+}
+
+### Crear (error ORD-003: usuario inexistente)
+POST {{host}}/api/orders
+Content-Type: application/json
+
+{
+  "usuarioId": "11111111-1111-1111-1111-111111111111",
+  "items": [
+    { "productoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "cantidad": 1 }
+  ]
+}
+
+### Crear (error ORD-004: producto inexistente)
+POST {{host}}/api/orders
+Content-Type: application/json
+
+{
+  "usuarioId": "a1b2c3d4-0000-0000-0000-111122223333",
+  "items": [
+    { "productoId": "11111111-1111-1111-1111-111111111111", "cantidad": 1 }
+  ]
+}
+
+### Crear (error ORD-005: stock insuficiente)
+POST {{host}}/api/orders
+Content-Type: application/json
+
+{
+  "usuarioId": "a1b2c3d4-0000-0000-0000-111122223333",
+  "items": [
+    { "productoId": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "cantidad": 500 }
+  ]
+}
+
+### Obtener por Id (error ORD-001; para el éxito, copiar el id de una orden creada)
+GET {{host}}/api/orders/11111111-1111-1111-1111-111111111111
+
+### Cambiar estado (reemplazar {id} por el de una orden creada)
+PUT {{host}}/api/orders/{id}/status
+Content-Type: application/json
+
+{
+  "estado": "Confirmada"
+}
+
+### Cambiar estado (error ORD-002: estado inexistente)
+PUT {{host}}/api/orders/{id}/status
+Content-Type: application/json
+
+{
+  "estado": "Perdida"
+}

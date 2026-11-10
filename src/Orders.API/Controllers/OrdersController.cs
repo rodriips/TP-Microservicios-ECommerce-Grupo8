@@ -31,6 +31,7 @@ public class OrdersController : ControllerBase
     [HttpGet]
     [ProducesResponseType(typeof(List<OrderResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [EjemploError(500, ErrorCodes.ORD_007, "Ocurrió un error inesperado al procesar la solicitud.", "Error interno al procesar la orden.")]
     public ActionResult<List<OrderResponse>> ObtenerTodos([FromQuery] Guid? usuarioId)
     {
         return Ok(_orderService.ObtenerTodos(usuarioId));
@@ -45,6 +46,8 @@ public class OrdersController : ControllerBase
     [ProducesResponseType(typeof(OrderResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [EjemploError(404, ErrorCodes.ORD_001, "El recurso solicitado no fue encontrado.", "Orden no encontrada.")]
+    [EjemploError(500, ErrorCodes.ORD_007, "Ocurrió un error inesperado al procesar la solicitud.", "Error interno al procesar la orden.")]
     public ActionResult<OrderResponse> ObtenerPorId(Guid id)
     {
         return Ok(_orderService.ObtenerPorId(id));
@@ -57,7 +60,7 @@ public class OrdersController : ControllerBase
     /// </summary>
     /// <param name="request">Usuario y lista de productos con cantidad.</param>
     /// <response code="201">Orden creada con estado Pendiente.</response>
-    /// <response code="400">ORD-002: datos inválidos (falta usuarioId, items vacío o cantidad menor a 1).</response>
+    /// <response code="400">ORD-002: datos inválidos (falta usuarioId o productoId, items vacío o cantidad menor a 1).</response>
     /// <response code="404">ORD-003: el usuario no existe. ORD-004: algún producto no existe.</response>
     /// <response code="422">ORD-005: stock insuficiente.</response>
     /// <response code="500">ORD-007: error interno del servidor (por ejemplo, Users.API o Products.API caídos).</response>
@@ -67,6 +70,11 @@ public class OrdersController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ErrorResponse), 422)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [EjemploError(400, ErrorCodes.ORD_002, "Los datos proporcionados no son válidos.", "La orden debe tener al menos un item.")]
+    [EjemploError(404, ErrorCodes.ORD_003, "El recurso solicitado no fue encontrado.", "Usuario no encontrado al crear la orden.")]
+    [EjemploError(404, ErrorCodes.ORD_004, "El recurso solicitado no fue encontrado.", "Producto no encontrado al crear la orden.")]
+    [EjemploError(422, ErrorCodes.ORD_005, "No se puede procesar la solicitud.", "Stock insuficiente para 'Notebook Dell XPS 15'. Disponible: 2, solicitado: 5.")]
+    [EjemploError(500, ErrorCodes.ORD_007, "Ocurrió un error inesperado al procesar la solicitud.", "Error interno al procesar la orden.")]
     public async Task<ActionResult<OrderResponse>> Crear([FromBody] CrearOrdenRequest request)
     {
         ValidarDatos(request);
@@ -92,6 +100,10 @@ public class OrdersController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [EjemploError(400, ErrorCodes.ORD_002, "Los datos proporcionados no son válidos.", "'Perdida' no es un estado válido. Los valores permitidos son: Pendiente, Confirmada, Enviada, Entregada, Cancelada.")]
+    [EjemploError(404, ErrorCodes.ORD_001, "El recurso solicitado no fue encontrado.", "Orden no encontrada.")]
+    [EjemploError(409, ErrorCodes.ORD_006, "No se puede modificar el estado.", "Una orden en estado 'Entregada' no puede pasar a 'Pendiente'.")]
+    [EjemploError(500, ErrorCodes.ORD_007, "Ocurrió un error inesperado al procesar la solicitud.", "Error interno al procesar la orden.")]
     public ActionResult<CambiarEstadoResponse> CambiarEstado(Guid id, [FromBody] CambiarEstadoRequest request)
     {
         ValidarDatos();
@@ -141,6 +153,15 @@ public class OrdersController : ControllerBase
         if (request.UsuarioId == Guid.Empty)
         {
             throw new ValidationException(ErrorCodes.ORD_002, "El usuarioId es obligatorio.");
+        }
+
+        // Lo mismo con el productoId de cada item: si falta, queda en Guid.Empty
+        foreach (OrderItemRequest item in request.Items)
+        {
+            if (item.ProductoId == Guid.Empty)
+            {
+                throw new ValidationException(ErrorCodes.ORD_002, "El productoId es obligatorio en cada item.");
+            }
         }
     }
 }
