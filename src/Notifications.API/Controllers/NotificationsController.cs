@@ -42,6 +42,9 @@ public class NotificationsController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [EjemploError(400, ErrorCodes.NTF_002, "Los datos enviados son inválidos.", "El tipo 'Fax' no es válido. Valores permitidos: Email, Push o SMS.")]
+    [EjemploError(404, ErrorCodes.NTF_001, "El recurso solicitado no fue encontrado.", "El usuario destinatario no fue encontrado.")]
+    [EjemploError(500, ErrorCodes.NTF_004, "Ocurrió un error inesperado al procesar la solicitud.", "Error interno al procesar la notificación.")]
     public async Task<ActionResult<NotificationResponse>> Enviar([FromBody] NotificationRequest request)
     {
         ValidarDatos(request);
@@ -60,6 +63,8 @@ public class NotificationsController : ControllerBase
     [ProducesResponseType(typeof(List<NotificationResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [EjemploError(404, ErrorCodes.NTF_003, "El recurso solicitado no fue encontrado.", "No se encontraron notificaciones para el usuario.")]
+    [EjemploError(500, ErrorCodes.NTF_004, "Ocurrió un error inesperado al procesar la solicitud.", "Error interno al procesar la notificación.")]
     public ActionResult<List<NotificationResponse>> ObtenerPorUsuario(Guid userId)
     {
         List<NotificationResponse> notificaciones = _notificationService.ObtenerPorUsuario(userId);

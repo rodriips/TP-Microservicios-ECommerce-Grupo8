@@ -35,6 +35,7 @@ public class ProductsController : ControllerBase
     [HttpGet]
     [ProducesResponseType(typeof(List<ProductResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [EjemploError(500, ErrorCodes.PRD_005, "Ocurrió un error inesperado al procesar la solicitud.", "Error interno al procesar el producto.")]
     public ActionResult<List<ProductResponse>> ObtenerTodos([FromQuery] string? categoria, [FromQuery] string? nombre)
     {
         List<ProductResponse> productos = _productService.ObtenerTodos(categoria, nombre);
@@ -52,6 +53,8 @@ public class ProductsController : ControllerBase
     [ProducesResponseType(typeof(ProductResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [EjemploError(404, ErrorCodes.PRD_001, "El recurso solicitado no fue encontrado.", "Producto no encontrado.")]
+    [EjemploError(500, ErrorCodes.PRD_005, "Ocurrió un error inesperado al procesar la solicitud.", "Error interno al procesar el producto.")]
     public ActionResult<ProductResponse> ObtenerPorId(Guid id)
     {
         ProductResponse producto = _productService.ObtenerPorId(id);
@@ -74,6 +77,9 @@ public class ProductsController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [EjemploError(400, ErrorCodes.PRD_002, "Los datos enviados son inválidos.", "El nombre es obligatorio.; El precio debe ser mayor a 0.")]
+    [EjemploError(409, ErrorCodes.PRD_003, "Ya existe un recurso con esos datos.", "Ya existe un producto con ese nombre en la categoría 'Electrónica'.")]
+    [EjemploError(500, ErrorCodes.PRD_005, "Ocurrió un error inesperado al procesar la solicitud.", "Error interno al procesar el producto.")]
     public ActionResult<ProductResponse> Crear([FromBody] ProductRequest request)
     {
         ValidarDatos();
@@ -95,6 +101,9 @@ public class ProductsController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [EjemploError(400, ErrorCodes.PRD_002, "Los datos enviados son inválidos.", "El nombre es obligatorio.; El precio debe ser mayor a 0.")]
+    [EjemploError(404, ErrorCodes.PRD_001, "El recurso solicitado no fue encontrado.", "Producto no encontrado.")]
+    [EjemploError(500, ErrorCodes.PRD_005, "Ocurrió un error inesperado al procesar la solicitud.", "Error interno al procesar el producto.")]
     public ActionResult<ProductResponse> Actualizar(Guid id, [FromBody] ProductRequest request)
     {
         ValidarDatos();
@@ -119,6 +128,9 @@ public class ProductsController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [EjemploError(404, ErrorCodes.PRD_001, "El recurso solicitado no fue encontrado.", "Producto no encontrado.")]
+    [EjemploError(409, ErrorCodes.PRD_004, "No se puede eliminar el recurso.", "El producto tiene órdenes activas y no puede eliminarse.")]
+    [EjemploError(500, ErrorCodes.PRD_005, "Ocurrió un error inesperado al procesar la solicitud.", "Error interno al procesar el producto.")]
     public async Task<IActionResult> Eliminar(Guid id)
     {
         await _productService.EliminarAsync(id);
