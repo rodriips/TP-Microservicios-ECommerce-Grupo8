@@ -35,6 +35,9 @@ public static class Configuracion
         {
             options.IncludeXmlComments(archivoXml);
         }
+
+        // Ejemplos de error de cada endpoint (los [EjemploError] de los controllers)
+        options.OperationFilter<EjemplosDeErrorFilter>();
     }
 
     // Genera el swagger.json en formato 2.0

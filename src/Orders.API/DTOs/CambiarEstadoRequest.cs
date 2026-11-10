@@ -7,7 +7,7 @@ public class CambiarEstadoRequest
 {
     /// <summary>Nuevo estado: Pendiente, Confirmada, Enviada, Entregada o Cancelada (no distingue mayúsculas).</summary>
     /// <example>Confirmada</example>
-    [Required]
+    [Required(ErrorMessage = "El estado es obligatorio.")]
     public string Estado { get; set; } = string.Empty;
 }
 
